@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block title %}Control Panel - {{ name }} Logs{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Logs for {{ name }}</h3>
+    <a href="/" class="btn btn-outline-primary">Back to Dashboard</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <span>Recent Logs</span>
+            <button id="auto-refresh" class="btn btn-sm btn-outline-secondary">Auto Refresh</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <pre id="logs-container" class="bg-dark text-light p-3" style="max-height: 600px; overflow-y: auto;">{{ logs }}</pre>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let autoRefresh = false;
+    let refreshInterval;
+    
+    document.getElementById('auto-refresh').addEventListener('click', function() {
+        autoRefresh = !autoRefresh;
+        this.classList.toggle('btn-outline-secondary');
+        this.classList.toggle('btn-success');
+        
+        if (autoRefresh) {
+            this.textContent = 'Auto Refresh: ON';
+            refreshInterval = setInterval(refreshLogs, 3000);
+        } else {
+            this.textContent = 'Auto Refresh';
+            clearInterval(refreshInterval);
+        }
+    });
+    
+    function refreshLogs() {
+        fetch(window.location.href)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newLogs = doc.getElementById('logs-container').textContent;
+                document.getElementById('logs-container').textContent = newLogs;
+            });
+    }
+</script>
+{% endblock %}

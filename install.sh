@@ -35,6 +35,37 @@ cp ./control_panel/templates/service-template.service ~/.config/systemd/user/con
 # Reload systemd user configuration
 systemctl --user daemon-reload
 
+# Detect shell and install shell completion
+SHELL_TYPE=""
+if [ -n "$BASH_VERSION" ]; then
+    SHELL_TYPE="bash"
+elif [ -n "$ZSH_VERSION" ]; then
+    SHELL_TYPE="zsh"
+elif [ -n "$FISH_VERSION" ]; then
+    SHELL_TYPE="fish"
+fi
+
+if [ -n "$SHELL_TYPE" ]; then
+    echo "Detected $SHELL_TYPE shell, installing shell completion..."
+    panel install_completion --shell $SHELL_TYPE
+    
+    echo "Shell completion installed. To enable it immediately, run:"
+    case $SHELL_TYPE in
+        bash)
+            echo "  source ~/.bash_completion"
+            ;;
+        zsh)
+            echo "  source ~/.zshrc"
+            ;;
+        fish)
+            echo "  source ~/.config/fish/completions/panel.fish"
+            ;;
+    esac
+else
+    echo "Could not detect shell type. To install shell completion manually, run:"
+    echo "  panel install_completion"
+fi
+
 echo "Control Panel installation complete!"
 echo ""
 echo "You can now use the 'panel' command to manage your services:"

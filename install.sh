@@ -13,6 +13,10 @@ fi
 # Activate virtual environment
 source .venv/bin/activate
 
+# Uninstall problematic packages first
+echo "Cleaning up any existing packages..."
+pip uninstall -y flask werkzeug || true
+
 # Install the package in development mode
 echo "Installing package..."
 pip install -e .

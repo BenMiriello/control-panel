@@ -8,7 +8,22 @@ from tabulate import tabulate
 from control_panel.utils.config import load_config, save_config
 from control_panel.utils.service import register_service, unregister_service, get_service_status, control_service
 
-@click.group()
+def get_service_names():
+    """Get a list of all registered service names"""
+    config = load_config()
+    return list(config["services"].keys())
+
+class CompleteServices(click.ParamType):
+    name = "service"
+    
+    def shell_complete(self, ctx, param, incomplete):
+        """Return completion suggestions for services that match the incomplete string."""
+        service_names = get_service_names()
+        return [click.CompletionItem(name) for name in service_names if name.startswith(incomplete)]
+
+SERVICE_NAME = CompleteServices()
+
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Control Panel - Manage your services and ports"""
     pass
@@ -61,7 +76,7 @@ def list():
     click.echo(tabulate(rows, headers=headers, tablefmt="simple"))
 
 @cli.command()
-@click.argument('name')
+@click.argument('name', type=SERVICE_NAME)
 def start(name):
     """Start a service"""
     success, error = control_service(name, "start")
@@ -72,7 +87,7 @@ def start(name):
     click.echo(f"Service '{name}' started")
 
 @cli.command()
-@click.argument('name')
+@click.argument('name', type=SERVICE_NAME)
 def stop(name):
     """Stop a service"""
     success, error = control_service(name, "stop")
@@ -83,7 +98,7 @@ def stop(name):
     click.echo(f"Service '{name}' stopped")
 
 @cli.command()
-@click.argument('name')
+@click.argument('name', type=SERVICE_NAME)
 def restart(name):
     """Restart a service"""
     success, error = control_service(name, "restart")
@@ -94,7 +109,7 @@ def restart(name):
     click.echo(f"Service '{name}' restarted")
 
 @cli.command()
-@click.argument('name')
+@click.argument('name', type=SERVICE_NAME)
 def enable(name):
     """Enable a service to start automatically"""
     config = load_config()
@@ -112,7 +127,7 @@ def enable(name):
     click.echo(f"Service '{name}' enabled to start automatically")
 
 @cli.command()
-@click.argument('name')
+@click.argument('name', type=SERVICE_NAME)
 def disable(name):
     """Disable a service from starting automatically"""
     config = load_config()
@@ -130,7 +145,7 @@ def disable(name):
     click.echo(f"Service '{name}' disabled from starting automatically")
 
 @cli.command()
-@click.argument('name')
+@click.argument('name', type=SERVICE_NAME)
 def logs(name):
     """View logs for a service"""
     config = load_config()
@@ -146,7 +161,7 @@ def logs(name):
         pass
 
 @cli.command()
-@click.argument('name')
+@click.argument('name', type=SERVICE_NAME)
 def unregister(name):
     """Unregister a service"""
     success, error = unregister_service(name)
@@ -182,6 +197,70 @@ def web(host, port, no_browser):
     
     click.echo(f"Starting Control Panel web UI at http://{host}:{port}")
     start_web_ui(host=host, port=port, debug=False, open_browser=not no_browser)
+
+@cli.command()
+@click.option("--shell", type=click.Choice(["bash", "zsh", "fish"]), help="Shell type")
+def install_completion(shell):
+    """Install shell completion for the panel command"""
+    if not shell:
+        shell = click.prompt(
+            "Which shell do you use?",
+            type=click.Choice(["bash", "zsh", "fish"])
+        )
+    
+    if shell == "bash":
+        path = Path.home() / ".bash_completion"
+        script = f"""
+# Control Panel completion
+_panel_completion() {{
+    local IFS=$'\\n'
+    local response
+
+    response=$(env COMP_WORDS="${{COMP_WORDS[*]}}" COMP_CWORD=$COMP_CWORD _PANEL_COMPLETE=bash_complete $1)
+
+    for completion in $response; do
+        IFS=',' read type value <<< "$completion"
+        if [[ $type == 'file' || $type == 'dir' ]]; then
+            COMPREPLY+=($value)
+        elif [[ $type == 'plain' ]]; then
+            COMPREPLY+=($value)
+        fi
+    done
+    return 0
+}}
+
+complete -o nosort -F _panel_completion panel
+"""
+    elif shell == "zsh":
+        path = Path.home() / ".zshrc"
+        script = """
+# Control Panel completion
+eval "$(_PANEL_COMPLETE=zsh_source panel)"
+"""
+    elif shell == "fish":
+        path = Path.home() / ".config" / "fish" / "completions" / "panel.fish"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        script = """
+# Control Panel completion
+eval (env _PANEL_COMPLETE=fish_source panel)
+"""
+    
+    if path.exists():
+        with open(path, "r") as f:
+            content = f.read()
+        
+        if "Control Panel completion" in content:
+            click.echo(f"Completion for {shell} already installed.")
+            return
+        
+        with open(path, "a") as f:
+            f.write(f"\n{script}\n")
+    else:
+        with open(path, "w") as f:
+            f.write(script)
+    
+    click.echo(f"Shell completion for {shell} has been installed.")
+    click.echo(f"Please restart your shell or run 'source {path}' to enable completion.")
 
 def main():
     """Entry point for the CLI"""

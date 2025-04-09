@@ -45,6 +45,8 @@ panel web
 - Web-based management interface
 - Global `panel` command for easy access
 - Command completion for service names
+- Backup and restore functionality
+- Simple update mechanism
 
 ## Web UI
 
@@ -145,6 +147,26 @@ panel add_range api 9000 9099
 panel register --name my-service --command "node server.js" --range web
 ```
 
+### Backup, Restore, and Update
+
+Control Panel provides commands to backup and restore your configuration, making it easy to migrate settings or recover from issues:
+
+```bash
+# Create a backup of your services configuration
+panel backup
+# Or specify a custom output file
+panel backup -o my-backup.json
+
+# Import configuration from a backup file
+panel import_config backup-file.json
+
+# Restore settings from an automatic backup (created during uninstall)
+panel restore
+
+# Update the Control Panel software
+panel update
+```
+
 ## Tab Completion
 
 Control Panel includes command completion for Bash and Zsh. This allows you to press TAB to complete service names and commands.
@@ -177,7 +199,7 @@ All service configurations are stored in `~/.config/control-panel/services.json`
 
 Control Panel uses systemd to manage service startup. Each registered service gets a systemd user service that can be managed through the Control Panel interface.
 
-## Installation and Uninstallation
+## Installation, Update, and Uninstallation
 
 ### Installation
 
@@ -196,32 +218,46 @@ This will:
 
 ### Updating
 
-To update Control Panel after pulling new changes:
+You can easily update Control Panel with the built-in update command:
 
 ```bash
-# Pull the latest code
-git pull
-
-# Run the install script again
-./install.sh
+# Update Control Panel to the latest version
+panel update
 ```
 
-The install script is designed to be run multiple times - it will update your installation safely without duplicating configurations.
+This will:
+1. Pull the latest code if running from a git repository
+2. Run the installation script
+3. Update all dependencies
 
 ### Uninstallation
 
-To completely remove Control Panel from your system:
+To completely remove Control Panel from your system while preserving your configuration:
 
 ```bash
-# Run the uninstall command
+# Run the uninstall command with default backup
 panel uninstall
 ```
 
 This will:
-1. Stop and disable all registered services
-2. Remove service templates from systemd
-3. Optionally remove all configuration files
-4. Guide you through removing the package
+1. Create a backup of your configuration
+2. Stop and disable all registered services
+3. Remove service templates from systemd
+4. Preserve your service configurations for future reinstalls
+
+To completely remove everything including configurations:
+
+```bash
+# Force complete removal
+panel uninstall --no-backup
+```
+
+To restore your settings after reinstalling:
+
+```bash
+# After reinstalling, restore settings from backup
+panel restore
+```
 
 ## Troubleshooting
 

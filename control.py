@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import click
 import subprocess
 from pathlib import Path
@@ -7,6 +8,7 @@ from tabulate import tabulate
 
 from utils.config import load_config, save_config
 from utils.service import register_service, unregister_service, get_service_status, control_service
+from utils.node_helper import kill_process_by_port, get_node_service_command
 
 @click.group()
 def cli():
@@ -20,8 +22,15 @@ def cli():
 @click.option('--dir', default='', help='Working directory (defaults to home directory)')
 @click.option('--range', 'range_name', default='default', help='Port range to use for auto-assignment')
 @click.option('--env', multiple=True, help='Environment variables in KEY=VALUE format')
-def register(name, command, port, dir, range_name, env):
+@click.option('--nodejs', is_flag=True, help='Optimize for Node.js service')
+def register(name, command, port, dir, range_name, env, nodejs):
     """Register a new service"""
+    # Optimize command for Node.js if specified
+    if nodejs and command.strip().startswith("node "):
+        script_path = command.replace("node ", "").strip()
+        command = get_node_service_command(script_path, dir)
+        click.echo(f"Optimized Node.js command: {command}")
+    
     success, result = register_service(name, command, port, dir, range_name, env)
     
     if not success:
@@ -29,8 +38,8 @@ def register(name, command, port, dir, range_name, env):
         return
     
     click.echo(f"Service '{name}' registered on port {result}")
-    click.echo(f"To start: ./control.py start {name}")
-    click.echo(f"To enable at startup: ./control.py enable {name}")
+    click.echo(f"To start: panel start {name}")
+    click.echo(f"To enable at startup: panel enable {name}")
 
 @cli.command()
 def list():
@@ -69,12 +78,26 @@ def start(name):
 
 @cli.command()
 @click.argument('name')
+@click.option('--force', is_flag=True, help='Force kill the process')
 def stop(name):
     """Stop a service"""
+    config = load_config()
+    
+    if name not in config["services"]:
+        click.echo(f"Error: Service '{name}' not found")
+        return
+    
+    # First try to stop through systemd
     success, error = control_service(name, "stop")
     if not success:
-        click.echo(f"Error: {error}")
-        return
+        click.echo(f"Warning: {error}")
+    
+    # Additionally kill any process that might be using the port
+    port = config["services"][name]["port"]
+    kill_result, kill_msg = kill_process_by_port(port)
+    
+    if kill_result:
+        click.echo(f"Killed processes on port {port}: {kill_msg}")
     
     click.echo(f"Service '{name}' stopped")
 
@@ -82,9 +105,22 @@ def stop(name):
 @click.argument('name')
 def restart(name):
     """Restart a service"""
-    success, error = control_service(name, "restart")
+    # First stop (with cleanup)
+    config = load_config()
+    
+    if name not in config["services"]:
+        click.echo(f"Error: Service '{name}' not found")
+        return
+    
+    # Stop service and kill processes
+    success, error = control_service(name, "stop")
+    port = config["services"][name]["port"]
+    kill_process_by_port(port)
+    
+    # Start service again
+    success, error = control_service(name, "start")
     if not success:
-        click.echo(f"Error: {error}")
+        click.echo(f"Error restarting: {error}")
         return
     
     click.echo(f"Service '{name}' restarted")
@@ -145,6 +181,17 @@ def logs(name):
 @click.argument('name')
 def unregister(name):
     """Unregister a service"""
+    config = load_config()
+    
+    if name not in config["services"]:
+        click.echo(f"Error: Service '{name}' not found")
+        return
+    
+    # Kill processes using the port
+    port = config["services"][name]["port"]
+    kill_process_by_port(port)
+    
+    # Unregister the service
     success, error = unregister_service(name)
     if not success:
         click.echo(f"Error: {error}")
@@ -167,6 +214,16 @@ def add_range(range_name, start, end):
     save_config(config)
     
     click.echo(f"Port range '{range_name}' added: {start}-{end}")
+
+@cli.command()
+@click.argument('port', type=int)
+def kill_port(port):
+    """Kill processes using a specific port"""
+    success, message = kill_process_by_port(port, force=True)
+    if success:
+        click.echo(f"Success: {message}")
+    else:
+        click.echo(f"No processes found using port {port}")
 
 if __name__ == '__main__':
     cli()

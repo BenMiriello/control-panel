@@ -10,7 +10,7 @@ import argparse
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
-from control_panel.utils.config import load_config, save_config
+from control_panel.utils.config import load_config, save_config, create_env_file
 from control_panel.utils.service import register_service, unregister_service, get_service_status, control_service
 
 # Get the package directory
@@ -79,6 +79,87 @@ def service_control(name, action):
         return jsonify({'status': 'error', 'message': f"Unknown action: {action}"})
     
     return redirect(url_for('index'))
+
+@app.route('/services/edit/<name>', methods=['GET', 'POST'])
+def edit_service(name):
+    config = load_config()
+    
+    if name not in config["services"]:
+        return jsonify({'status': 'error', 'message': f"Service '{name}' not found"})
+    
+    service = config["services"][name]
+    
+    if request.method == 'POST':
+        # Get form data
+        command = request.form.get('command')
+        port = request.form.get('port')
+        directory = request.form.get('directory', '')
+        env_vars = request.form.get('env_vars', '').splitlines()
+        
+        # Try to detect port if not provided
+        if not port and request.form.get('detect_port', False):
+            try:
+                # Get process ID
+                result = subprocess.run(
+                    ["systemctl", "--user", "show", f"control-panel@{name}.service", "-p", "MainPID", "--value"],
+                    capture_output=True, text=True, check=True
+                )
+                pid = result.stdout.strip()
+                
+                if pid and pid != "0":
+                    # Get listening ports for this PID
+                    result = subprocess.run(
+                        ["lsof", "-i", "-P", "-n", "-a", "-p", pid],
+                        capture_output=True, text=True
+                    )
+                    
+                    # Parse output to find listening port
+                    for line in result.stdout.splitlines():
+                        if "LISTEN" in line:
+                            parts = line.split()
+                            if len(parts) >= 9:
+                                addr_port = parts[8].split(":")
+                                if len(addr_port) >= 2:
+                                    port = int(addr_port[-1])
+            except Exception as e:
+                print(f"Error detecting port: {e}")
+        else:
+            try:
+                port = int(port) if port else service["port"]
+            except ValueError:
+                return jsonify({'status': 'error', 'message': 'Port must be a number'})
+        
+        # Update service configuration
+        service["command"] = command
+        service["port"] = port
+        service["working_dir"] = directory
+        
+        # Process environment variables
+        service_env = {}
+        for env_var in env_vars:
+            if '=' in env_var:
+                key, value = env_var.split('=', 1)
+                service_env[key] = value
+        
+        # Always add PORT to environment
+        service_env["PORT"] = str(port)
+        service["env"] = service_env
+        
+        # Save updated configuration
+        save_config(config)
+        
+        # Update environment file
+        create_env_file(name, service)
+        
+        # Restart service if it was already running
+        status, _ = get_service_status(name)
+        if status == 'active':
+            control_service(name, 'restart')
+        
+        return redirect(url_for('index'))
+    
+    # GET request - show form
+    return render_template('edit_service.html', service=service)
 
 @app.route('/services/add', methods=['GET', 'POST'])
 def add_service():

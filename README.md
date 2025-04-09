@@ -19,23 +19,20 @@ This tool helps you manage multiple services running on your Linux machine with 
 git clone https://github.com/BenMiriello/control-panel.git
 cd control-panel
 
-# Install dependencies
-pip install -r requirements.txt
+# Run the installation script
+./install.sh
 
-# Setup the control panel
-./setup.sh
-
-# Register a new service via CLI
-./control.py register --name my-service --command '/path/to/service' --port 8080
+# Register a new service
+panel register --name my-service --command '/path/to/service' --port 8080
 
 # List all services
-./control.py list
+panel list
 
 # Start a service
-./control.py start my-service
+panel start my-service
 
 # Start the web UI
-./start.sh
+panel web
 ```
 
 ## Features
@@ -46,6 +43,7 @@ pip install -r requirements.txt
 - Live log viewing
 - Service status monitoring
 - Web-based management interface
+- Global `panel` command for easy access
 
 ## Web UI
 
@@ -61,7 +59,7 @@ Control Panel includes a web-based user interface that makes it easy to:
 To start the web UI, simply run:
 
 ```bash
-./start.sh
+panel web
 ```
 
 This will start the web interface on http://localhost:9000 by default.
@@ -71,42 +69,48 @@ This will start the web interface on http://localhost:9000 by default.
 ### Registering a Service
 
 ```bash
-./control.py register --name service-name --command '/path/to/start-script.sh' [--port 8080] [--dir /working/directory] [--env KEY=VALUE]
+panel register --name service-name --command '/path/to/start-script.sh' [--port 8080] [--dir /working/directory] [--env KEY=VALUE]
 ```
+
+When registering a service, make sure to:
+- Use the full path to your command/script
+- Specify a working directory if needed
+- Add environment variables as needed using `--env`
+- Your command should reference the `PORT` environment variable if it needs to know which port to listen on
 
 ### Managing Services
 
 ```bash
 # List all services
-./control.py list
+panel list
 
 # Start a service
-./control.py start service-name
+panel start service-name
 
 # Stop a service
-./control.py stop service-name
+panel stop service-name
 
 # Restart a service
-./control.py restart service-name
+panel restart service-name
 
 # Enable automatic startup
-./control.py enable service-name
+panel enable service-name
 
 # Disable automatic startup
-./control.py disable service-name
+panel disable service-name
 
 # View service logs
-./control.py logs service-name
+panel logs service-name
 
 # Unregister a service
-./control.py unregister service-name
+panel unregister service-name
 ```
 
 ### Managing Port Ranges
 
 ```bash
 # Add a new port range
-./control.py add_range range-name 8000 9000
+panel add_range range-name 8000 9000
 ```
 
 ## Configuration
@@ -116,3 +120,62 @@ All service configurations are stored in `~/.config/control-panel/services.json`
 ## Systemd Integration
 
 Control Panel uses systemd to manage service startup. Each registered service gets a systemd user service that can be managed through the Control Panel interface.
+
+## Installation Options
+
+### Using the install script
+
+The simplest way to install is using the provided script:
+
+```bash
+./install.sh
+```
+
+This will:
+1. Create a virtual environment
+2. Install the package in development mode
+3. Set up necessary directories and configuration
+4. Make the `panel` command available
+
+### Manual installation
+
+If you prefer to install manually:
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install the package
+pip install -e .
+
+# Set up systemd service template
+mkdir -p ~/.config/systemd/user/
+cp ./control_panel/templates/service-template.service ~/.config/systemd/user/control-panel@.service
+systemctl --user daemon-reload
+```
+
+## Troubleshooting
+
+### Service appears to be running but isn't accessible
+
+If a service shows as "active" but isn't actually running, make sure:
+1. Your command is using the `PORT` environment variable correctly
+2. There are no other processes already using the allocated port
+3. The service logs (`panel logs service-name`) may provide more details
+
+### The list command shows an error
+
+If you see an error when running `panel list`, ensure you've installed the package correctly and have all dependencies installed:
+
+```bash
+pip install -e .
+```
+
+### The web UI doesn't open
+
+Make sure Flask is installed and the port you're using (default 9000) isn't already in use:
+
+```bash
+pip install flask
+```

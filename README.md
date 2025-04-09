@@ -31,8 +31,8 @@ panel list
 # Start a service
 panel start my-service
 
-# Start the web UI
-panel web
+# Start the web UI (in the background)
+panel web --background
 ```
 
 ## Features
@@ -59,13 +59,81 @@ Control Panel includes a web-based user interface that makes it easy to:
 - Add new services and port ranges
 - Monitor service status
 
-To start the web UI, simply run:
+### Running the Web UI
+
+You can run the web UI in two ways:
+
+#### Foreground Mode (Interactive)
 
 ```bash
+# Start the web UI in foreground mode
 panel web
+
+# Specify a different port
+panel web --port 8090
+
+# Don't open browser automatically
+panel web --no-browser
 ```
 
-This will start the web interface on http://localhost:9000 by default.
+This will run the web UI in your terminal. Press Ctrl+C to stop it.
+
+#### Background Mode (As a Service)
+
+```bash
+# Start the web UI as a background service
+panel web --background
+
+# With custom host and port
+panel web --background --host 0.0.0.0 --port 8090
+```
+
+When run in background mode, the web UI is registered as a regular service named `control-panel-web` and can be managed like any other service:
+
+```bash
+# Check status
+panel list
+
+# Stop the web UI
+panel stop control-panel-web
+
+# Start it again
+panel start control-panel-web
+
+# View logs
+panel logs control-panel-web
+```
+
+### Network Access
+
+By default, the web UI binds to `0.0.0.0` (all network interfaces) when run with `--background`, which allows you to access it from other devices on your network.
+
+If you're having trouble accessing the web UI from other devices:
+
+1. Make sure your firewall allows the port:
+   ```bash
+   sudo ufw allow 9000/tcp
+   ```
+
+2. Check that the web UI is binding to the correct interface:
+   ```bash
+   # When starting, use:
+   panel web --host 0.0.0.0
+   ```
+
+3. Verify the service is running and listening on all interfaces:
+   ```bash
+   sudo netstat -tuln | grep 9000
+   ```
+   You should see `0.0.0.0:9000` in the output.
+
+4. Try accessing using your machine's IP address:
+   ```bash
+   # Find your IP
+   ip addr show
+   
+   # Then access via http://YOUR_IP:9000
+   ```
 
 ## CLI Usage
 
@@ -297,3 +365,26 @@ pip install 'flask>=2.0.0,<2.2.0' 'werkzeug>=2.0.0,<2.1.0'
 ```
 
 Some newer versions of Flask/Werkzeug have compatibility issues that can prevent the web UI from starting.
+
+### Cannot access web UI from other devices
+
+If you're having trouble accessing the web UI from other devices on your network:
+
+1. Make sure the web UI is running in background mode or with the correct host:
+   ```bash
+   panel web --background  # This will bind to 0.0.0.0 by default
+   # OR
+   panel web --host 0.0.0.0  # Explicitly binding to all interfaces
+   ```
+
+2. Check your firewall settings:
+   ```bash
+   # Allow the port through UFW
+   sudo ufw allow 9000/tcp
+   sudo ufw reload
+   ```
+
+3. Verify the service is properly listening:
+   ```bash
+   sudo ss -tulnp | grep 9000
+   ```

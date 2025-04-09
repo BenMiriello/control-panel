@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}Control Panel - Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h3>Registered Services</h3>
+    </div>
+    <div class="col-auto">
+        <a href="/ranges/add" class="btn btn-outline-secondary">Add Port Range</a>
+    </div>
+</div>
+
+{% if services %}
+<div class="row">
+    {% for service in services %}
+    <div class="col-md-6">
+        <div class="card service-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ service.name }}</h5>
+                <div>
+                    {% if service.status == 'active' %}
+                    <span class="badge bg-success">Running</span>
+                    {% else %}
+                    <span class="badge bg-danger">Stopped</span>
+                    {% endif %}
+                    
+                    {% if service.enabled %}
+                    <span class="badge bg-info">Auto-start</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <p><strong>Port:</strong> {{ service.port }}</p>
+                <p><strong>Command:</strong> <code>{{ service.command }}</code></p>
+                
+                <div class="btn-group">
+                    {% if service.status == 'active' %}
+                    <a href="/services/control/{{ service.name }}/stop" class="btn btn-sm btn-warning btn-actions">Stop</a>
+                    <a href="/services/control/{{ service.name }}/restart" class="btn btn-sm btn-primary btn-actions">Restart</a>
+                    {% else %}
+                    <a href="/services/control/{{ service.name }}/start" class="btn btn-sm btn-success btn-actions">Start</a>
+                    {% endif %}
+                    
+                    {% if service.enabled %}
+                    <a href="/services/control/{{ service.name }}/disable" class="btn btn-sm btn-outline-secondary btn-actions">Disable Auto-start</a>
+                    {% else %}
+                    <a href="/services/control/{{ service.name }}/enable" class="btn btn-sm btn-outline-info btn-actions">Enable Auto-start</a>
+                    {% endif %}
+                    
+                    <a href="/logs/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Logs</a>
+                    <a href="/services/delete/{{ service.name }}" class="btn btn-sm btn-danger btn-actions" onclick="return confirm('Are you sure you want to delete this service?')">Delete</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">
+    No services registered yet. <a href="/services/add" class="alert-link">Add a service</a> to get started.
+</div>
+{% endif %}
+
+<div class="mt-5">
+    <h3>Port Ranges</h3>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Range Name</th>
+                <th>Start Port</th>
+                <th>End Port</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for name, range in port_ranges.items() %}
+            <tr>
+                <td>{{ name }}</td>
+                <td>{{ range.start }}</td>
+                <td>{{ range.end }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -23,7 +23,7 @@ cd control-panel
 ./install.sh
 
 # Register a new service
-panel register --name my-service --command '/path/to/service' --port 8080
+panel register --name my-service --command "/absolute/path/to/executable args" --port 8080
 
 # List all services
 panel list
@@ -43,8 +43,7 @@ panel web --background
 - Live log viewing
 - Service status monitoring
 - Web-based management interface
-- Global `panel` command for easy access
-- Command completion for service names
+- Global `panel` command with tab completion
 - Backup and restore functionality
 - Simple update mechanism
 
@@ -140,30 +139,38 @@ If you're having trouble accessing the web UI from other devices:
 ### Registering a Service
 
 ```bash
-panel register --name service-name --command "full-command-to-start-service" [--port 8080] [--dir /working/directory] [--env KEY=VALUE]
+panel register --name service-name --command "COMMAND" --port PORT [--dir DIRECTORY] [--env KEY=VALUE]
 ```
 
-When registering a service, make sure to:
-- Use the full command needed to start your service, not just the path
-- Include any arguments or options your command needs
-- Wrap the command in quotes if it contains spaces or special characters
-- Specify a working directory if needed
-- Add environment variables as needed using `--env`
+#### About the Command Parameter
 
-Examples:
+The `--command` parameter must be the exact command you would run in a terminal to start your service:
+
+- Include the full absolute path to executables
+- For virtual environment Python applications, use the Python executable from the venv
+- Include all required arguments and flags
+- Wrap in quotes if it contains spaces
+
+#### Examples:
 
 ```bash
+# Basic executable with absolute path
+panel register --name simple-service --command "/usr/local/bin/myservice" --port 8080
+
 # Node.js application
-panel register --name my-node-app --command "node /path/to/app.js" --port 3000
+panel register --name node-api --command "/usr/bin/node /home/user/projects/api/server.js" --port 3000
 
-# Python web application
-panel register --name flask-app --command "python /path/to/app.py" --env FLASK_ENV=production
+# Python application using virtualenv
+panel register --name flask-app --command "/home/user/projects/flask-app/venv/bin/python /home/user/projects/flask-app/app.py" --port 5000
 
-# Java application
-panel register --name spring-app --command "java -jar /path/to/app.jar" --port 8080
+# Python application with working directory
+panel register --name django-app --command "/home/user/projects/django-app/venv/bin/python manage.py runserver 0.0.0.0:8000" --dir "/home/user/projects/django-app"
 
-# Custom shell script
-panel register --name my-service --command "/path/to/start.sh" --dir /path/to/working/dir
+# Java application with arguments
+panel register --name spring-app --command "/usr/bin/java -jar /home/user/apps/myapp.jar --server.port=8080" --port 8080
+
+# Applications needing environment variables
+panel register --name env-app --command "/home/user/bin/app" --port 8050 --env DEBUG=1 --env LOG_LEVEL=info
 ```
 
 ### Managing Services
@@ -187,12 +194,14 @@ panel enable service-name
 # Disable automatic startup
 panel disable service-name
 
-# View service logs
+# View logs for a service
 panel logs service-name
 
 # Unregister a service
 panel unregister service-name
 ```
+
+Tab completion is available for all service names after installing shell completion.
 
 ### Managing Port Ranges
 
@@ -212,7 +221,7 @@ panel add_range web 8000 8099
 panel add_range api 9000 9099
 
 # Register a service using a specific port range
-panel register --name my-service --command "node server.js" --range web
+panel register --name my-service --command "/path/to/executable" --range web
 ```
 
 ### Backup, Restore, and Update
@@ -222,11 +231,10 @@ Control Panel provides commands to backup and restore your configuration, making
 ```bash
 # Create a backup of your services configuration
 panel backup
-# Or specify a custom output file
-panel backup -o my-backup.json
+# The backup will be saved to ~/.config/control-panel/backups/
 
 # Import configuration from a backup file
-panel import_config backup-file.json
+panel import_config /path/to/backup-file.json
 
 # Restore settings from an automatic backup (created during uninstall)
 panel restore
@@ -255,8 +263,9 @@ source ~/.bashrc  # or ~/.zshrc for Zsh
 Once enabled, you can use tab completion for service names:
 
 ```bash
-panel start <TAB>       # Lists all services
-panel stop my-<TAB>     # Completes service names starting with "my-"
+panel <TAB>              # Lists all available commands
+panel start <TAB>        # Lists all services
+panel stop my-<TAB>      # Completes service names starting with "my-"
 ```
 
 ## Configuration
@@ -347,6 +356,18 @@ pm2 delete service-name
 ```
 
 Then register it with Control Panel. Trying to manage the same service with multiple systems can cause conflicts.
+
+### Using with Virtual Environments
+
+If your service uses a Python virtual environment, **do not** use `source venv/bin/activate` in your command. Instead, use the absolute path to the Python executable in the virtual environment:
+
+```bash
+# Instead of:
+# source venv/bin/activate && python app.py
+
+# Use:
+panel register --name my-app --command "/path/to/venv/bin/python /path/to/app.py" --port 8000
+```
 
 ### The list command shows an error
 

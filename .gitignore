@@ -24,6 +24,7 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
 
 # IDE files
 .idea/
@@ -34,3 +35,7 @@ ENV/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Control Panel specific
+**/backups/
+*.json.backup

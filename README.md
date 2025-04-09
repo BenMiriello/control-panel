@@ -44,6 +44,7 @@ panel web
 - Service status monitoring
 - Web-based management interface
 - Global `panel` command for easy access
+- Command completion for service names
 
 ## Web UI
 
@@ -69,14 +70,31 @@ This will start the web interface on http://localhost:9000 by default.
 ### Registering a Service
 
 ```bash
-panel register --name service-name --command '/path/to/start-script.sh' [--port 8080] [--dir /working/directory] [--env KEY=VALUE]
+panel register --name service-name --command "full-command-to-start-service" [--port 8080] [--dir /working/directory] [--env KEY=VALUE]
 ```
 
 When registering a service, make sure to:
-- Use the full path to your command/script
+- Use the full command needed to start your service, not just the path
+- Include any arguments or options your command needs
+- Wrap the command in quotes if it contains spaces or special characters
 - Specify a working directory if needed
 - Add environment variables as needed using `--env`
-- Your command should reference the `PORT` environment variable if it needs to know which port to listen on
+
+Examples:
+
+```bash
+# Node.js application
+panel register --name my-node-app --command "node /path/to/app.js" --port 3000
+
+# Python web application
+panel register --name flask-app --command "python /path/to/app.py" --env FLASK_ENV=production
+
+# Java application
+panel register --name spring-app --command "java -jar /path/to/app.jar" --port 8080
+
+# Custom shell script
+panel register --name my-service --command "/path/to/start.sh" --dir /path/to/working/dir
+```
 
 ### Managing Services
 
@@ -108,9 +126,47 @@ panel unregister service-name
 
 ### Managing Port Ranges
 
+Port ranges are used for automatic port assignment when registering services. If you don't specify a port when registering a service, Control Panel will automatically assign one from the default port range.
+
+Port ranges are useful for grouping similar services together. For example, you might want to use:
+- 8000-8099 for web applications
+- 9000-9099 for APIs
+- 3000-3099 for development servers
+
 ```bash
 # Add a new port range
-panel add_range range-name 8000 9000
+panel add_range range-name start-port end-port
+
+# Example:
+panel add_range web 8000 8099
+panel add_range api 9000 9099
+
+# Register a service using a specific port range
+panel register --name my-service --command "node server.js" --range web
+```
+
+## Tab Completion
+
+Control Panel includes command completion for Bash and Zsh. This allows you to press TAB to complete service names and commands.
+
+To enable tab completion for your shell:
+
+```bash
+# For Bash
+panel --install-completion=bash
+
+# For Zsh
+panel --install-completion=zsh
+
+# Restart your shell or source your profile
+source ~/.bashrc  # or ~/.zshrc for Zsh
+```
+
+Once enabled, you can use tab completion for service names:
+
+```bash
+panel start <TAB>       # Lists all services
+panel stop my-<TAB>     # Completes service names starting with "my-"
 ```
 
 ## Configuration
@@ -163,6 +219,18 @@ If a service shows as "active" but isn't actually running, make sure:
 1. Your command is using the `PORT` environment variable correctly
 2. There are no other processes already using the allocated port
 3. The service logs (`panel logs service-name`) may provide more details
+
+### Services managed by other systems
+
+If you're migrating from another service manager like PM2, make sure to stop and remove the service from that system first:
+
+```bash
+# For PM2
+pm2 stop service-name
+pm2 delete service-name
+```
+
+Then register it with Control Panel. Trying to manage the same service with multiple systems can cause conflicts.
 
 ### The list command shows an error
 

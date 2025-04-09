@@ -153,10 +153,10 @@ To enable tab completion for your shell:
 
 ```bash
 # For Bash
-panel --install-completion=bash
+panel completion --shell bash
 
 # For Zsh
-panel --install-completion=zsh
+panel completion --shell zsh
 
 # Restart your shell or source your profile
 source ~/.bashrc  # or ~/.zshrc for Zsh
@@ -177,9 +177,9 @@ All service configurations are stored in `~/.config/control-panel/services.json`
 
 Control Panel uses systemd to manage service startup. Each registered service gets a systemd user service that can be managed through the Control Panel interface.
 
-## Installation Options
+## Installation and Uninstallation
 
-### Using the install script
+### Installation
 
 The simplest way to install is using the provided script:
 
@@ -192,24 +192,36 @@ This will:
 2. Install the package in development mode
 3. Set up necessary directories and configuration
 4. Make the `panel` command available
+5. Install shell completion
 
-### Manual installation
+### Updating
 
-If you prefer to install manually:
+To update Control Panel after pulling new changes:
 
 ```bash
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate
+# Pull the latest code
+git pull
 
-# Install the package
-pip install -e .
-
-# Set up systemd service template
-mkdir -p ~/.config/systemd/user/
-cp ./control_panel/templates/service-template.service ~/.config/systemd/user/control-panel@.service
-systemctl --user daemon-reload
+# Run the install script again
+./install.sh
 ```
+
+The install script is designed to be run multiple times - it will update your installation safely without duplicating configurations.
+
+### Uninstallation
+
+To completely remove Control Panel from your system:
+
+```bash
+# Run the uninstall command
+panel uninstall
+```
+
+This will:
+1. Stop and disable all registered services
+2. Remove service templates from systemd
+3. Optionally remove all configuration files
+4. Guide you through removing the package
 
 ## Troubleshooting
 
@@ -242,8 +254,10 @@ pip install -e .
 
 ### The web UI doesn't open
 
-Make sure Flask is installed and the port you're using (default 9000) isn't already in use:
+Make sure Flask is installed with compatible versions:
 
 ```bash
-pip install flask
+pip install 'flask>=2.0.0,<2.2.0' 'werkzeug>=2.0.0,<2.1.0'
 ```
+
+Some newer versions of Flask/Werkzeug have compatibility issues that can prevent the web UI from starting.

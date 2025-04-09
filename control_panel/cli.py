@@ -2,6 +2,8 @@
 
 import click
 import subprocess
+import sys
+import os
 from pathlib import Path
 from tabulate import tabulate
 
@@ -193,14 +195,18 @@ def add_range(range_name, start, end):
 @click.option('--no-browser', is_flag=True, help='Do not open browser automatically')
 def web(host, port, no_browser):
     """Start the web UI for Control Panel"""
-    from control_panel.web_ui import start_web_ui
-    
-    click.echo(f"Starting Control Panel web UI at http://{host}:{port}")
-    start_web_ui(host=host, port=port, debug=False, open_browser=not no_browser)
+    try:
+        from control_panel.web_ui import start_web_ui
+        click.echo(f"Starting Control Panel web UI at http://{host}:{port}")
+        start_web_ui(host=host, port=port, debug=False, open_browser=not no_browser)
+    except ImportError as e:
+        click.echo(f"Error: {e}")
+        click.echo("Please reinstall with compatible Flask version:")
+        click.echo("  pip install 'flask>=2.0.0,<2.2.0' 'werkzeug>=2.0.0,<2.1.0'")
 
 @cli.command()
 @click.option("--shell", type=click.Choice(["bash", "zsh", "fish"]), help="Shell type")
-def install_completion(shell):
+def completion(shell):
     """Install shell completion for the panel command"""
     if not shell:
         shell = click.prompt(
@@ -261,6 +267,52 @@ eval (env _PANEL_COMPLETE=fish_source panel)
     
     click.echo(f"Shell completion for {shell} has been installed.")
     click.echo(f"Please restart your shell or run 'source {path}' to enable completion.")
+
+@cli.command()
+def uninstall():
+    """Uninstall Control Panel and clean up configuration"""
+    if not click.confirm("Are you sure you want to uninstall Control Panel?"):
+        return
+    
+    click.echo("Uninstalling Control Panel...")
+    
+    # Stop all services
+    config = load_config()
+    for name in config["services"].keys():
+        try:
+            click.echo(f"Stopping service '{name}'...")
+            subprocess.run(["systemctl", "--user", "stop", f"control-panel@{name}.service"],
+                          stderr=subprocess.DEVNULL)
+            subprocess.run(["systemctl", "--user", "disable", f"control-panel@{name}.service"],
+                          stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+    
+    # Remove systemd service template
+    try:
+        systemd_service = Path.home() / ".config" / "systemd" / "user" / "control-panel@.service"
+        if systemd_service.exists():
+            os.unlink(systemd_service)
+        
+        # Reload systemd configuration
+        subprocess.run(["systemctl", "--user", "daemon-reload"])
+    except Exception as e:
+        click.echo(f"Warning: Could not remove systemd service template: {e}")
+    
+    # Clean up configuration directory
+    if click.confirm("Do you want to remove all Control Panel configuration?"):
+        try:
+            import shutil
+            config_dir = Path.home() / ".config" / "control-panel"
+            if config_dir.exists():
+                shutil.rmtree(config_dir)
+                click.echo("Configuration directory removed.")
+        except Exception as e:
+            click.echo(f"Warning: Could not remove configuration directory: {e}")
+    
+    click.echo("Control Panel has been uninstalled.")
+    click.echo("You may need to remove the package using pip or your package manager.")
+    click.echo("  pip uninstall control-panel")
 
 def main():
     """Entry point for the CLI"""

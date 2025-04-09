@@ -33,7 +33,9 @@ def index():
                 'port': service['port'],
                 'command': service['command'],
                 'status': status,
-                'enabled': enabled
+                'enabled': enabled,
+                'working_dir': service.get('working_dir', ''),
+                'env': service.get('env', {})
             })
         except Exception as e:
             # Handle errors gracefully
@@ -42,7 +44,9 @@ def index():
                 'port': service['port'],
                 'command': service['command'],
                 'status': 'error',
-                'enabled': False
+                'enabled': False,
+                'working_dir': service.get('working_dir', ''),
+                'env': service.get('env', {})
             })
     
     # Sort by name

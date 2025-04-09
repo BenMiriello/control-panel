@@ -1,0 +1,13 @@
+[Unit]
+Description=Control Panel managed service: %i
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/control-panel/env/%i.env
+ExecStart=/bin/bash -c "${COMMAND}"
+Restart=on-failure
+WorkingDirectory=%h
+
+[Install]
+WantedBy=default.target

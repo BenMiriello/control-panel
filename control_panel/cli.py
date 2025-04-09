@@ -522,8 +522,16 @@ def restore():
 @cli.command()
 @click.option('--force', is_flag=True, help='Update even if no repository is found')
 @click.option('--version', help='Specific branch, tag, or commit SHA to checkout')
-def update(force, version):
-    """Update the Control Panel software"""
+@click.option('--fetch-only', is_flag=True, help='Only fetch updates without checking out or installing')
+def update(force, version, fetch_only):
+    """Update the Control Panel software to the latest version or a specific version
+
+    Examples:
+        panel update                # Update to latest version of default branch
+        panel update --version main # Update to latest version of main branch 
+        panel update --version v1.2 # Update to tag v1.2
+        panel update --version abc123 # Update to commit with SHA abc123
+    """
     repo_dir = Path(__file__).resolve().parent.parent
     git_dir = repo_dir / ".git"
     
@@ -539,28 +547,103 @@ def update(force, version):
             original_dir = os.getcwd()
             os.chdir(repo_dir)
             
-            if version:
-                # Fetch all and checkout specific version
-                click.echo(f"Fetching updates and checking out {version}...")
-                subprocess.run(["git", "fetch", "--all"], check=True)
-                subprocess.run(["git", "checkout", version], check=True)
-            else:
-                # Pull latest from master/main branch
-                click.echo("Pulling latest changes from master/main branch...")
-                
-                # Determine if main or master is used
-                result = subprocess.run(["git", "branch", "-r"], capture_output=True, text=True)
-                if "origin/main" in result.stdout:
-                    default_branch = "main"
-                else:
-                    default_branch = "master"
-                
-                click.echo(f"Using {default_branch} as default branch")
-                subprocess.run(["git", "checkout", default_branch], check=True)
-                subprocess.run(["git", "pull", "origin", default_branch], check=True)
+            # Always fetch all updates first
+            click.echo("Fetching updates from all remotes...")
+            subprocess.run(["git", "fetch", "--all"], check=True)
             
+            if fetch_only:
+                click.echo("Updates fetched successfully. Use 'panel update --version X' to checkout a specific version.")
+                os.chdir(original_dir)
+                return
+            
+            # Get current branch or commit
+            current = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, check=True
+            ).stdout.strip()
+            
+            # Determine target branch/version
+            if version:
+                target = version
+                click.echo(f"Checking out {version}...")
+                
+                # Check if it's a branch, tag, or commit
+                ref_type = None
+                
+                # Check if it's a local branch
+                result = subprocess.run(
+                    ["git", "branch", "--list", version],
+                    capture_output=True, text=True
+                )
+                if version in result.stdout:
+                    ref_type = "local branch"
+                
+                # Check if it's a remote branch
+                if not ref_type:
+                    result = subprocess.run(
+                        ["git", "branch", "-r", "--list", f"*/{{version}}"],
+                        capture_output=True, text=True
+                    )
+                    if any(version in line for line in result.stdout.splitlines()):
+                        ref_type = "remote branch"
+                
+                # Check if it's a tag
+                if not ref_type:
+                    result = subprocess.run(
+                        ["git", "tag", "--list", version],
+                        capture_output=True, text=True
+                    )
+                    if version in result.stdout:
+                        ref_type = "tag"
+                
+                # Assume it's a commit SHA if not identified
+                if not ref_type:
+                    ref_type = "commit SHA"
+                
+                click.echo(f"Identified {version} as a {ref_type}")
+                
+                # Create a temporary branch if it's a commit SHA
+                if ref_type == "commit SHA":
+                    temp_branch = f"temp-checkout-{version[:7]}"
+                    subprocess.run(["git", "checkout", "-b", temp_branch, version], check=True)
+                else:
+                    subprocess.run(["git", "checkout", version], check=True)
+            else:
+                # Determine default branch if no version specified
+                result = subprocess.run(["git", "remote", "show", "origin"], capture_output=True, text=True)
+                for line in result.stdout.splitlines():
+                    if "HEAD branch" in line:
+                        default_branch = line.split(":")[-1].strip()
+                        break
+                else:
+                    # Fallback to checking for main or master
+                    result = subprocess.run(["git", "branch", "-r"], capture_output=True, text=True)
+                    if "origin/main" in result.stdout:
+                        default_branch = "main"
+                    else:
+                        default_branch = "master"
+                
+                target = default_branch
+                click.echo(f"Using {default_branch} as default branch")
+                
+                # Check if we're already on the default branch
+                if current == default_branch:
+                    # Just pull latest changes
+                    click.echo(f"Already on {default_branch}, pulling latest changes...")
+                    subprocess.run(["git", "pull", "origin", default_branch], check=True)
+                else:
+                    # Switch to default branch and pull
+                    click.echo(f"Switching to {default_branch}...")
+                    subprocess.run(["git", "checkout", default_branch], check=True)
+                    subprocess.run(["git", "pull", "origin", default_branch], check=True)
+            
+            # Return to original directory
             os.chdir(original_dir)
+            
+            click.echo(f"Successfully updated to {target}")
+            
         except Exception as e:
+            os.chdir(original_dir)
             click.echo(f"Error during git update: {e}")
             return
     
@@ -583,6 +666,25 @@ def update(force, version):
             return
     
     click.echo("Control Panel updated successfully!")
+    
+    # Show the current version
+    try:
+        os.chdir(repo_dir)
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+        
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+        
+        os.chdir(original_dir)
+        
+        click.echo(f"Current version: {branch} ({commit})")
+    except Exception:
+        pass
 
 @cli.command()
 @click.option('--output', '-o', type=click.Path(), help='Output file for backup')

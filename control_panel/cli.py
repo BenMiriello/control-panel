@@ -4,10 +4,13 @@ import click
 import subprocess
 import sys
 import os
+import shutil
+import tempfile
+import json
 from pathlib import Path
 from tabulate import tabulate
 
-from control_panel.utils.config import load_config, save_config
+from control_panel.utils.config import load_config, save_config, CONFIG_DIR, CONFIG_FILE
 from control_panel.utils.service import register_service, unregister_service, get_service_status, control_service
 
 def get_service_names():
@@ -269,12 +272,25 @@ eval (env _PANEL_COMPLETE=fish_source panel)
     click.echo(f"Please restart your shell or run 'source {path}' to enable completion.")
 
 @cli.command()
-def uninstall():
-    """Uninstall Control Panel and clean up configuration"""
+@click.option('--backup/--no-backup', default=True, 
+              help='Create a backup of configuration (default: Yes)')
+def uninstall(backup):
+    """Uninstall Control Panel but optionally preserve settings"""
     if not click.confirm("Are you sure you want to uninstall Control Panel?"):
         return
     
     click.echo("Uninstalling Control Panel...")
+    
+    # Create backup of config if needed
+    if backup:
+        backup_dir = Path.home() / ".config" / "control-panel-backup"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Copy config file
+        if CONFIG_FILE.exists():
+            backup_file = backup_dir / "services.json"
+            shutil.copy(CONFIG_FILE, backup_file)
+            click.echo(f"Configuration backed up to {backup_file}")
     
     # Stop all services
     config = load_config()
@@ -299,20 +315,183 @@ def uninstall():
     except Exception as e:
         click.echo(f"Warning: Could not remove systemd service template: {e}")
     
-    # Clean up configuration directory
-    if click.confirm("Do you want to remove all Control Panel configuration?"):
-        try:
-            import shutil
-            config_dir = Path.home() / ".config" / "control-panel"
-            if config_dir.exists():
-                shutil.rmtree(config_dir)
-                click.echo("Configuration directory removed.")
-        except Exception as e:
-            click.echo(f"Warning: Could not remove configuration directory: {e}")
+    # Clean up configuration directory if not backing up
+    if not backup:
+        if click.confirm("Do you want to remove all Control Panel configuration?"):
+            try:
+                if CONFIG_DIR.exists():
+                    shutil.rmtree(CONFIG_DIR)
+                    click.echo("Configuration directory removed.")
+            except Exception as e:
+                click.echo(f"Warning: Could not remove configuration directory: {e}")
     
     click.echo("Control Panel has been uninstalled.")
-    click.echo("You may need to remove the package using pip or your package manager.")
+    
+    if backup:
+        click.echo("\nYour services configuration has been preserved.")
+        click.echo("To restore when reinstalling, run:")
+        click.echo("  panel restore")
+    
+    click.echo("\nYou may need to remove the package using pip or your package manager:")
     click.echo("  pip uninstall control-panel")
+
+@cli.command()
+def restore():
+    """Restore configuration from a previous backup"""
+    backup_dir = Path.home() / ".config" / "control-panel-backup"
+    backup_file = backup_dir / "services.json"
+    
+    if not backup_file.exists():
+        click.echo("Error: No backup configuration found.")
+        return
+    
+    if not click.confirm("Restore configuration from backup? This will overwrite current settings."):
+        return
+    
+    # Ensure config directory exists
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Copy backup to config location
+    shutil.copy(backup_file, CONFIG_FILE)
+    
+    # Create env directory if it doesn't exist
+    env_dir = CONFIG_DIR / "env"
+    env_dir.mkdir(exist_ok=True)
+    
+    # Load the restored config
+    config = load_config()
+    
+    # Recreate environment files
+    for name, service in config["services"].items():
+        env_file = env_dir / f"{name}.env"
+        with open(env_file, 'w') as f:
+            f.write(f"COMMAND={service['command']}\n")
+            f.write(f"PORT={service['port']}\n")
+            for key, value in service.get("env", {}).items():
+                f.write(f"{key}={value}\n")
+    
+    click.echo(f"Configuration restored with {len(config['services'])} services.")
+    click.echo("You may need to enable services for autostart:")
+    for name in config["services"].keys():
+        if config["services"][name].get("enabled", False):
+            click.echo(f"  panel enable {name}")
+
+@cli.command()
+@click.option('--force', is_flag=True, help='Update even if no repository is found')
+def update(force):
+    """Update the Control Panel software"""
+    repo_dir = Path(__file__).resolve().parent.parent
+    git_dir = repo_dir / ".git"
+    
+    if not git_dir.exists() and not force:
+        click.echo("Error: Could not find repository. Are you running from an installed version?")
+        click.echo("If you want to update anyway, use --force")
+        return
+    
+    if git_dir.exists():
+        # Update repository
+        click.echo("Updating from repository...")
+        try:
+            original_dir = os.getcwd()
+            os.chdir(repo_dir)
+            
+            # Pull latest changes
+            subprocess.run(["git", "pull"], check=True)
+            
+            os.chdir(original_dir)
+        except Exception as e:
+            click.echo(f"Error during git update: {e}")
+            return
+    
+    # Run the install script if it exists
+    install_script = repo_dir / "install.sh"
+    if install_script.exists():
+        click.echo("Running install script...")
+        try:
+            subprocess.run(["bash", str(install_script)], check=True)
+        except Exception as e:
+            click.echo(f"Error during installation: {e}")
+            return
+    else:
+        # Fallback to reinstalling package
+        click.echo("Reinstalling package...")
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "install", "-e", str(repo_dir)], check=True)
+        except Exception as e:
+            click.echo(f"Error during package installation: {e}")
+            return
+    
+    click.echo("Control Panel updated successfully!")
+
+@cli.command()
+@click.option('--output', '-o', type=click.Path(), help='Output file for backup')
+def backup(output):
+    """Backup all Control Panel configuration"""
+    # Default output location
+    if not output:
+        timestamp = subprocess.check_output(["date", "+%Y%m%d-%H%M%S"]).decode().strip()
+        output = f"control-panel-backup-{timestamp}.json"
+    
+    # Load configuration
+    config = load_config()
+    
+    # Write to backup file
+    with open(output, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    click.echo(f"Configuration backed up to {output}")
+    click.echo(f"To restore: panel import {output}")
+
+@cli.command()
+@click.argument('input_file', type=click.Path(exists=True))
+@click.option('--merge/--overwrite', default=True, 
+              help='Merge with existing config or overwrite (default: merge)')
+def import_config(input_file, merge):
+    """Import configuration from a backup file"""
+    # Load backup file
+    with open(input_file, 'r') as f:
+        imported_config = json.load(f)
+    
+    if merge:
+        # Load current config
+        current_config = load_config()
+        
+        # Merge services and port ranges
+        for name, service in imported_config.get("services", {}).items():
+            current_config["services"][name] = service
+        
+        for name, range_info in imported_config.get("port_ranges", {}).items():
+            current_config["port_ranges"][name] = range_info
+        
+        # Save merged config
+        save_config(current_config)
+        
+        # Re-create environment files
+        env_dir = CONFIG_DIR / "env"
+        for name, service in current_config["services"].items():
+            env_file = env_dir / f"{name}.env"
+            with open(env_file, 'w') as f:
+                f.write(f"COMMAND={service['command']}\n")
+                f.write(f"PORT={service['port']}\n")
+                for key, value in service.get("env", {}).items():
+                    f.write(f"{key}={value}\n")
+        
+        click.echo(f"Imported and merged configuration with {len(imported_config.get('services', {}))} services")
+    else:
+        # Save imported config directly
+        save_config(imported_config)
+        
+        # Re-create environment files
+        env_dir = CONFIG_DIR / "env"
+        for name, service in imported_config.get("services", {}).items():
+            env_file = env_dir / f"{name}.env"
+            with open(env_file, 'w') as f:
+                f.write(f"COMMAND={service['command']}\n")
+                f.write(f"PORT={service['port']}\n")
+                for key, value in service.get("env", {}).items():
+                    f.write(f"{key}={value}\n")
+        
+        click.echo(f"Imported configuration with {len(imported_config.get('services', {}))} services (overwriting previous config)")
 
 def main():
     """Entry point for the CLI"""

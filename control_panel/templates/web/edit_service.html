@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Control Panel - Edit Service{% endblock %}
+
+{% block content %}
+<h3>Edit Service: {{ service.name }}</h3>
+
+<form method="POST" action="/services/edit/{{ service.name }}">
+    <div class="mb-3">
+        <label for="command" class="form-label">Command</label>
+        <input type="text" class="form-control" id="command" name="command" value="{{ service.command }}" required>
+        <div class="form-text">The command to start the service (e.g., /path/to/script.sh or python /path/to/app.py)</div>
+    </div>
+    
+    <div class="mb-3">
+        <label for="port" class="form-label">Port</label>
+        <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port }}">
+        <div class="form-text">Leave empty to auto-detect port from the running service</div>
+    </div>
+    
+    <div class="mb-3">
+        <label for="directory" class="form-label">Working Directory</label>
+        <input type="text" class="form-control" id="directory" name="directory" value="{{ service.working_dir }}">
+        <div class="form-text">Directory where the service should run</div>
+    </div>
+    
+    <div class="mb-3">
+        <label for="env_vars" class="form-label">Environment Variables</label>
+        <textarea class="form-control" id="env_vars" name="env_vars" rows="3">{% for key, value in service.env.items() %}{% if key != 'PORT' %}{{ key }}={{ value }}
+{% endif %}{% endfor %}</textarea>
+        <div class="form-text">One variable per line in KEY=VALUE format (e.g., DEBUG=1)</div>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Update Service</button>
+    <a href="/" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %}

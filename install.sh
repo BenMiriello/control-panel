@@ -51,7 +51,7 @@ fi
 
 if [ -n "$SHELL_TYPE" ]; then
     echo "Detected $SHELL_TYPE shell, installing shell completion..."
-    panel install_completion --shell $SHELL_TYPE
+    panel completion --shell $SHELL_TYPE
     
     echo "Shell completion installed. To enable it immediately, run:"
     case $SHELL_TYPE in
@@ -67,7 +67,7 @@ if [ -n "$SHELL_TYPE" ]; then
     esac
 else
     echo "Could not detect shell type. To install shell completion manually, run:"
-    echo "  panel install_completion"
+    echo "  panel completion"
 fi
 
 echo "Control Panel installation complete!"
@@ -79,4 +79,7 @@ echo "  panel web                     - Start the web UI"
 echo ""
 echo "Example - register a service:"
 echo "  panel register --name my-service --command '/path/to/start-script.sh' --port 8080"
+echo ""
+echo "To uninstall Control Panel:"
+echo "  panel uninstall"
 echo ""

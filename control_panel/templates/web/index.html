@@ -32,7 +32,14 @@
                 </div>
             </div>
             <div class="card-body">
-                <p><strong>Port:</strong> {{ service.port }}</p>
+                <p>
+                    <strong>Port:</strong> {{ service.port }}
+                    {% if service.status == 'active' %}
+                    <a href="http://{{ request.host.split(':')[0] }}:{{ service.port }}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
+                        <i class="bi bi-box-arrow-up-right"></i> Open
+                    </a>
+                    {% endif %}
+                </p>
                 <p><strong>Command:</strong> <code>{{ service.command }}</code></p>
                 
                 <div class="btn-group">
@@ -49,6 +56,7 @@
                     <a href="/services/control/{{ service.name }}/enable" class="btn btn-sm btn-outline-info btn-actions">Enable Auto-start</a>
                     {% endif %}
                     
+                    <a href="/services/edit/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Edit</a>
                     <a href="/logs/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Logs</a>
                     <a href="/services/delete/{{ service.name }}" class="btn btn-sm btn-danger btn-actions" onclick="return confirm('Are you sure you want to delete this service?')">Delete</a>
                 </div>
@@ -84,4 +92,21 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-refresh the dashboard every 5 seconds
+    setInterval(function() {
+        // Fetch the updated dashboard content
+        fetch(window.location.href)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newContent = doc.querySelector('main').innerHTML;
+                document.querySelector('main').innerHTML = newContent;
+            });
+    }, 5000);
+</script>
 {% endblock %}

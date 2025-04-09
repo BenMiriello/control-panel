@@ -78,14 +78,14 @@ def get_service_status(name):
     # Check if the service is active
     result = subprocess.run(
         ["systemctl", "--user", "is-active", f"control-panel@{name}.service"],
-        capture_output=True, text=True
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     status = result.stdout.strip() if result.returncode == 0 else "inactive"
     
     # Check if enabled at boot
     result = subprocess.run(
         ["systemctl", "--user", "is-enabled", f"control-panel@{name}.service"],
-        capture_output=True, text=True, stderr=subprocess.DEVNULL
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     enabled = result.returncode == 0
     
@@ -100,7 +100,7 @@ def control_service(name, action):
     
     result = subprocess.run(
         ["systemctl", "--user", action, f"control-panel@{name}.service"],
-        capture_output=True, text=True
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     
     if result.returncode != 0:

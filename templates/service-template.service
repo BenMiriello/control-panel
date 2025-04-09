@@ -6,7 +6,11 @@ After=network.target
 Type=simple
 EnvironmentFile=%h/.config/control-panel/env/%i.env
 ExecStart=/bin/bash -c "${COMMAND}"
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10
 Restart=on-failure
+RestartSec=5
 WorkingDirectory=%h
 
 [Install]

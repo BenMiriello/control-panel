@@ -50,42 +50,66 @@ EOL
     echo "Created requirements.txt file"
 fi
 
-# Create global command script
-INSTALL_PATH="/usr/local/bin/panel"
-REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo "Installing 'panel' command..."
-
-# Create panel command launcher
-cat > /tmp/panel << EOL
-#!/bin/bash
-# Control Panel command launcher
-if [ "\$1" = "web" ]; then
-    shift
-    python3 "${REPO_PATH}/web_ui.py" "\$@"
+# Check for virtual environment
+if [ ! -d ".venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    deactivate
+    echo "Virtual environment created and dependencies installed"
 else
-    python3 "${REPO_PATH}/control.py" "\$@"
-fi
-EOL
-
-# Install command with sudo
-if sudo cp /tmp/panel "$INSTALL_PATH" && sudo chmod +x "$INSTALL_PATH"; then
-    echo "✅ Installed 'panel' command successfully at $INSTALL_PATH"
-    echo "   Usage: panel [command] [options]"
-    echo "   For web UI: panel web"
-else
-    echo "❌ Failed to install 'panel' command. You may need sudo privileges."
-    echo "   You can still use the control panel with ./control.py and ./web_ui.py"
+    echo "Virtual environment already exists"
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    deactivate
 fi
 
 # Make scripts executable
 chmod +x ./control.py
 chmod +x ./web_ui.py
-[ -f ./start.sh ] && chmod +x ./start.sh
+chmod +x ./start.sh
+
+# Create a global command
+INSTALL_DIR="$HOME/.local/bin"
+mkdir -p "$INSTALL_DIR"
+
+# Create panel command
+cat > "$INSTALL_DIR/panel" << EOL
+#!/bin/bash
+CONTROL_PANEL_DIR="$(pwd)"
+source "$CONTROL_PANEL_DIR/.venv/bin/activate"
+"$CONTROL_PANEL_DIR/control.py" "\$@"
+deactivate
+EOL
+
+chmod +x "$INSTALL_DIR/panel"
+
+# Create panel-ui command
+cat > "$INSTALL_DIR/panel-ui" << EOL
+#!/bin/bash
+CONTROL_PANEL_DIR="$(pwd)"
+source "$CONTROL_PANEL_DIR/.venv/bin/activate"
+"$CONTROL_PANEL_DIR/web_ui.py" "\$@"
+deactivate
+EOL
+
+chmod +x "$INSTALL_DIR/panel-ui"
+
+# Check if ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo ""
+    echo "NOTE: $HOME/.local/bin is not in your PATH."
+    echo "Add the following line to your shell profile (.bashrc, .zshrc, etc.):"
+    echo 'export PATH="$HOME/.local/bin:$PATH"'
+    echo ""
+    echo "Then run: source ~/.bashrc (or source ~/.zshrc)"
+fi
 
 # Reload systemd user configuration
 systemctl --user daemon-reload
 
 echo "Control Panel setup complete!"
 echo "Use 'panel --help' to see available commands"
-echo "Use 'panel web' to start the web interface"
+echo "Use 'panel-ui' to start the web interface"
+echo "You can now register and manage your services"

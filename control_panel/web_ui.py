@@ -6,6 +6,7 @@ import time
 import click
 import subprocess
 import webbrowser
+import argparse
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
@@ -171,3 +172,15 @@ def start_web_ui(host='127.0.0.1', port=9000, debug=False, open_browser=True):
         threading.Thread(target=open_browser_delayed).start()
     
     app.run(host=host, port=port, debug=debug)
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Control Panel Web UI')
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to (0.0.0.0 for all interfaces)')
+    parser.add_argument('--port', type=int, default=9000, help='Port to listen on')
+    parser.add_argument('--debug', action='store_true', help='Run in debug mode')
+    parser.add_argument('--no-browser', action='store_true', help='Do not open browser automatically')
+    return parser.parse_args()
+
+if __name__ == '__main__':
+    args = parse_args()
+    start_web_ui(host=args.host, port=args.port, debug=args.debug, open_browser=not args.no_browser)

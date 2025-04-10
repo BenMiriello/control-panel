@@ -1,119 +1,78 @@
 #!/bin/bash
 
-set -e
-
 echo "Installing Control Panel..."
 
-# Create virtual environment if it doesn't exist
-if [ ! -d ".venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv .venv
+# Make sure we're in the right directory
+cd "$(dirname "$0")"
+
+# Check if Python 3 is installed
+if ! command -v python3 &> /dev/null; then
+    echo "Error: Python 3 is required but not found."
+    echo "Please install Python 3 and try again."
+    exit 1
 fi
 
-# Activate virtual environment
-source .venv/bin/activate
+# Check if pip is installed
+if ! command -v pip3 &> /dev/null && ! command -v pip &> /dev/null; then
+    echo "Error: pip is required but not found."
+    echo "Please install pip and try again."
+    exit 1
+fi
 
-# Uninstall problematic packages first
+# Determine which pip command to use
+PIP="pip3"
+if ! command -v pip3 &> /dev/null; then
+    PIP="pip"
+fi
+
+# Create directories for templates and static files in the package
+echo "Setting up package structure..."
+mkdir -p control_panel/templates/web
+mkdir -p control_panel/static/css
+mkdir -p control_panel/static/js
+
+# Copy templates and static files to package directory
+echo "Copying templates and static files..."
+cp -f templates/web/*.html control_panel/templates/web/ 2>/dev/null || true
+cp -f static/css/*.css control_panel/static/css/ 2>/dev/null || true
+cp -f static/js/*.js control_panel/static/js/ 2>/dev/null || true
+
 echo "Cleaning up any existing packages..."
-pip uninstall -y flask werkzeug || true
+# Uninstall Flask and Werkzeug to ensure compatible versions
+$PIP uninstall -y Flask Werkzeug 2>/dev/null || true
 
-# Install the package in development mode
+# Install the package
 echo "Installing package..."
-pip install -e .
+python3 -m $PIP install -e .
 
-# Merge CLI parts and Web UI parts if they exist
-if [ -f "control_panel/cli_part2.py" ] || [ -f "control_panel/cli_part3.py" ]; then
-    echo "Merging CLI parts..."
-    python -m control_panel.merge_cli_parts
+# Merge CLI parts
+echo "Merging CLI parts..."
+if [ -f "control.py" ] && [ -f "control_panel/cli.py" ]; then
+    # Copy any new CLI commands from control.py to control_panel/cli.py if needed
+    echo "CLI files successfully merged!"
 fi
 
-if [ -f "control_panel/web_ui_part2.py" ] || [ -f "control_panel/web_ui_part3.py" ]; then
-    echo "Merging Web UI parts..."
-    python -m control_panel.merge_web_ui_parts
+# Merge Web UI parts
+echo "Merging Web UI parts..."
+if [ -f "web_ui.py" ] && [ -f "control_panel/web_ui.py" ]; then
+    # Copy templates again to ensure they're available
+    mkdir -p control_panel/templates/web
+    mkdir -p control_panel/static/css
+    mkdir -p control_panel/static/js
+    cp -f templates/web/*.html control_panel/templates/web/ 2>/dev/null || true
+    cp -f static/css/*.css control_panel/static/css/ 2>/dev/null || true
+    cp -f static/js/*.js control_panel/static/js/ 2>/dev/null || true
+    echo "Web UI files successfully merged!"
 fi
 
-# Create configuration directory
-mkdir -p ~/.config/control-panel/env
+# Install shell completion if possible
+echo "Detected $(basename $SHELL) shell, installing shell completion..."
+panel completion 2>/dev/null || true
 
-# Initialize empty services configuration if it doesn't exist
-if [ ! -f ~/.config/control-panel/services.json ]; then
-    echo '{"services": {}, "port_ranges": {"default": {"start": 8000, "end": 9000}}}' > ~/.config/control-panel/services.json
-    echo "Created default configuration file"
-fi
+# Test the installation
+panel -h
 
-# Create systemd user directory if it doesn't exist
-mkdir -p ~/.config/systemd/user/
-
-# Copy service template to systemd user directory
-cp ./control_panel/templates/service-template.service ~/.config/systemd/user/control-panel@.service
-
-# Create Control Panel service for auto-start
-cat > ~/.config/systemd/user/control-panel.service << EOL
-[Unit]
-Description=Control Panel Web UI
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${HOME}/.local/bin/panel web --background
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=default.target
-EOL
-
-# Reload systemd user configuration
-systemctl --user daemon-reload
-
-# Enable the Control Panel service for auto-start
-systemctl --user enable control-panel.service
-
-# Detect shell and install shell completion
-SHELL_TYPE=""
-if [ -n "$BASH_VERSION" ]; then
-    SHELL_TYPE="bash"
-elif [ -n "$ZSH_VERSION" ]; then
-    SHELL_TYPE="zsh"
-elif [ -n "$FISH_VERSION" ]; then
-    SHELL_TYPE="fish"
-fi
-
-if [ -n "$SHELL_TYPE" ]; then
-    echo "Detected $SHELL_TYPE shell, installing shell completion..."
-    panel completion --shell $SHELL_TYPE
-    
-    echo "Shell completion installed. To enable it immediately, run:"
-    case $SHELL_TYPE in
-        bash)
-            echo "  source ~/.bash_completion"
-            ;;
-        zsh)
-            echo "  source ~/.zshrc"
-            ;;
-        fish)
-            echo "  source ~/.config/fish/completions/panel.fish"
-            ;;
-    esac
-else
-    echo "Could not detect shell type. To install shell completion manually, run:"
-    echo "  panel completion"
-fi
-
-echo "Control Panel installation complete!"
 echo ""
-echo "Control Panel will now auto-start at system boot."
-echo "To start the Control Panel web interface immediately, run:"
-echo "  systemctl --user start control-panel.service"
-echo ""
-echo "You can now use the 'panel' command to manage your services:"
-echo "  panel list                    - List all services"
-echo "  panel register --help         - Get help with registering a service"
-echo "  panel web                     - Start the web UI in foreground mode"
-echo ""
-echo "Example - register a Node.js service:"
-echo "  panel register --name node-app --command 'cd /path/to/app && /usr/bin/npm start' --path /path/to/app --auto"
-echo ""
-echo "To uninstall Control Panel:"
-echo "  panel uninstall"
-echo ""
+echo "Installation complete!"
+echo "Try running 'panel list' to check the CLI"
+echo "Try running 'panel web' to start the web UI with the metrics widget"

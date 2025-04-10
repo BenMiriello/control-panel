@@ -1,4 +1,32 @@
-from setuptools import setup, find_packages
+import os
+import shutil
+from setuptools import setup, find_packages, Command
+
+class CopyFiles(Command):
+    """Custom command to copy templates and static files into the package directory"""
+    description = 'Copy templates and static files into the package directory'
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        # Copy templates
+        if os.path.exists('templates'):
+            if not os.path.exists('control_panel/templates'):
+                os.makedirs('control_panel/templates', exist_ok=True)
+            shutil.copytree('templates', 'control_panel/templates', dirs_exist_ok=True)
+            print("Templates copied to control_panel/templates")
+        
+        # Copy static files
+        if os.path.exists('static'):
+            if not os.path.exists('control_panel/static'):
+                os.makedirs('control_panel/static', exist_ok=True)
+            shutil.copytree('static', 'control_panel/static', dirs_exist_ok=True)
+            print("Static files copied to control_panel/static")
 
 setup(
     name="control-panel",
@@ -34,4 +62,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Topic :: System :: Systems Administration",
     ],
+    cmdclass={
+        'copy_files': CopyFiles,
+    },
 )

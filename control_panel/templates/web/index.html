@@ -40,6 +40,7 @@
                     </a>
                     {% endif %}
                 </p>
+                <p><strong>Path:</strong> {{ service.working_dir }}</p>
                 <p><strong>Command:</strong> <code>{{ service.command }}</code></p>
                 
                 <div class="btn-group">
@@ -53,7 +54,7 @@
                     {% if service.enabled %}
                     <a href="/services/control/{{ service.name }}/disable" class="btn btn-sm btn-outline-secondary btn-actions">Disable Auto-start</a>
                     {% else %}
-                    <a href="/services/control/{{ service.name }}/enable" class="btn btn-sm btn-outline-info btn-actions">Enable Auto-start</a>
+                    <a href="/services/control/{{ service.name }}/auto" class="btn btn-sm btn-outline-info btn-actions">Enable Auto-start</a>
                     {% endif %}
                     
                     <a href="/services/edit/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Edit</a>

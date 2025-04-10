@@ -6,8 +6,10 @@ import time
 import click
 import subprocess
 import webbrowser
+import threading
 import importlib.resources
 import pkg_resources
+import shutil
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
@@ -31,14 +33,47 @@ def create_app():
     if PACKAGE_MODE:
         # In package mode, we need to locate the templates and static files within the package
         try:
-            # First try to find the templates and static folders using pkg_resources
-            template_folder = pkg_resources.resource_filename('control_panel', 'templates/web')
-            static_folder = pkg_resources.resource_filename('control_panel', 'static')
+            # First try to find the templates and static folders at repo root
+            template_dir = Path(__file__).resolve().parent.parent / 'templates' / 'web'
+            static_dir = Path(__file__).resolve().parent.parent / 'static'
             
-            # Fall back to looking for them relative to the current file if they're not in the package
+            # If they exist at repo root, copy them to the package directory
+            if template_dir.exists() and static_dir.exists():
+                package_template_dir = Path(__file__).resolve().parent / 'templates' / 'web'
+                package_static_dir = Path(__file__).resolve().parent / 'static'
+                
+                # Create target directories if they don't exist
+                package_template_dir.parent.mkdir(exist_ok=True)
+                package_template_dir.mkdir(exist_ok=True)
+                package_static_dir.mkdir(exist_ok=True)
+                package_static_dir.joinpath('css').mkdir(exist_ok=True)
+                package_static_dir.joinpath('js').mkdir(exist_ok=True)
+                
+                # Copy all files from repo templates to package templates
+                for template_file in template_dir.glob('*.html'):
+                    shutil.copy2(template_file, package_template_dir)
+                
+                # Copy CSS files
+                for css_file in (static_dir / 'css').glob('*.css'):
+                    shutil.copy2(css_file, package_static_dir / 'css')
+                
+                # Copy JS files
+                for js_file in (static_dir / 'js').glob('*.js'):
+                    shutil.copy2(js_file, package_static_dir / 'js')
+                
+                template_folder = str(package_template_dir)
+                static_folder = str(package_static_dir)
+                click.echo(f"Copied templates to {template_folder}")
+                click.echo(f"Copied static files to {static_folder}")
+            else:
+                # Use package directories
+                template_folder = str(Path(__file__).resolve().parent / 'templates' / 'web')
+                static_folder = str(Path(__file__).resolve().parent / 'static')
+                
             if not os.path.exists(template_folder):
-                template_folder = str(Path(__file__).resolve().parent.parent / 'templates' / 'web')
-                static_folder = str(Path(__file__).resolve().parent.parent / 'static')
+                template_folder = str(Path.cwd() / 'templates' / 'web')
+                static_folder = str(Path.cwd() / 'static')
+                click.echo(f"Using templates from current directory: {template_folder}")
                 
             app = Flask(__name__, 
                        template_folder=template_folder,
@@ -50,7 +85,7 @@ def create_app():
             app = Flask(__name__, 
                        template_folder=template_folder,
                        static_folder=static_folder)
-            print(f"Warning: Using templates and static files from current directory: {e}")
+            click.echo(f"Warning: Using templates and static files from current directory due to error: {e}")
     else:
         # In local mode, we need to use the local file paths
         template_folder = str(Path(__file__).resolve().parent.parent / 'templates' / 'web')
@@ -91,7 +126,7 @@ def get_metrics():
     """API endpoint to get current system metrics"""
     return jsonify(get_all_metrics())
 
-@app.route('/services/control/<name>/<action>')
+@app.route('/services/control/<n>/<action>')
 def service_control(name, action):
     if action in ['start', 'stop', 'restart']:
         success, error = control_service(name, action)
@@ -148,7 +183,7 @@ def add_service():
     port_ranges = config.get("port_ranges", {})
     return render_template('add_service.html', port_ranges=port_ranges)
 
-@app.route('/services/delete/<name>')
+@app.route('/services/delete/<n>')
 def delete_service(name):
     success, error = unregister_service(name)
     if not success:
@@ -181,7 +216,7 @@ def add_range():
     # GET request - show form
     return render_template('add_range.html')
 
-@app.route('/logs/<name>')
+@app.route('/logs/<n>')
 def view_logs(name):
     config = load_config()
     
@@ -206,7 +241,6 @@ def start_web_ui(host='127.0.0.1', port=9000, debug=False, open_browser=True):
             time.sleep(1)
             webbrowser.open(f'http://{host}:{port}')
         
-        import threading
         threading.Thread(target=open_browser_delayed).start()
     
     app.run(host=host, port=port, debug=debug)

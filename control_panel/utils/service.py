@@ -106,6 +106,23 @@ def control_service(name, action):
     if result.returncode != 0:
         return False, f"Failed to {action} service: {result.stderr}"
     
+    # If we're starting a service and it has a port, update if actual port differs
+    if action == "start":
+        # Wait a moment for the service to start
+        import time
+        time.sleep(1)
+        
+        # Try to detect the actual port
+        port = detect_service_port(name)
+        if port is not None and port != config["services"][name]["port"]:
+            # Update the port in configuration
+            config["services"][name]["port"] = port
+            config["services"][name]["env"]["PORT"] = str(port)
+            save_config(config)
+            
+            # Update environment file
+            create_env_file(name, config["services"][name])
+    
     return True, None
 
 def check_service_running(name, port):
@@ -118,3 +135,35 @@ def check_service_running(name, port):
         return result.returncode == 0
     except Exception:
         return False
+
+def detect_service_port(name):
+    """Try to detect the actual port being used by a service"""
+    try:
+        # Get process ID
+        result = subprocess.run(
+            ["systemctl", "--user", "show", f"control-panel@{name}.service", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, check=True
+        )
+        pid = result.stdout.strip()
+        
+        if pid and pid != "0":
+            # Get listening ports for this PID
+            result = subprocess.run(
+                ["lsof", "-i", "-P", "-n", "-a", "-p", pid],
+                capture_output=True, text=True
+            )
+            
+            for line in result.stdout.splitlines():
+                if "LISTEN" in line:
+                    parts = line.split()
+                    if len(parts) >= 9:
+                        addr_port = parts[8].split(":")
+                        if len(addr_port) >= 2:
+                            try:
+                                detected_port = int(addr_port[-1])
+                                return detected_port
+                            except ValueError:
+                                pass
+        return None
+    except Exception:
+        return None

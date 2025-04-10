@@ -291,77 +291,59 @@ All service configurations are stored in `~/.config/control-panel/services.json`
 
 Control Panel uses systemd to manage service startup. Each registered service gets a systemd user service that can be managed through the Control Panel interface.
 
-### Auto-starting Control Panel
+### Auto-start Feature
 
-After installation, Control Panel itself is set to auto-start at system boot. This ensures that all of your registered services that are set to auto-start will be properly managed even after system reboots.
+Control Panel itself can auto-start at system boot. After installation:
 
-The Control Panel web UI can also be configured to auto-start:
+1. The Control Panel web UI will automatically start when your system boots
+2. All services marked with `--auto` will be started automatically
+3. You can disable auto-start for individual services using `panel disable service-name`
 
-```bash
-# Start the web UI and enable it to auto-start
-panel web --background --auto
-```
+## Handling Special Applications
 
-## Installation, Update, and Uninstallation
+### Node.js Applications
 
-### Installation
-
-The simplest way to install is using the provided script:
+When working with Node.js applications, especially those using npm scripts, use the following approach:
 
 ```bash
-./install.sh
+# Using npm start
+panel register --name app-name \
+  --command "cd /path/to/app && /usr/bin/npm start" \
+  --path "/path/to/app" \
+  --port 3000 \
+  --auto
 ```
 
-This will:
-1. Create a virtual environment
-2. Install the package in development mode
-3. Set up necessary directories and configuration
-4. Make the `panel` command available
-5. Install shell completion
-6. Configure Control Panel to auto-start at system boot
+The important parts are:
+1. Include the `cd` command before the npm command to ensure npm runs in the correct directory
+2. Use the full path to the npm executable (usually `/usr/bin/npm`)
+3. Set the `--path` parameter to the application directory
 
-### Updating
+### Python Applications with Virtual Environments
 
-You can easily update Control Panel with the built-in update command:
+For Python applications using virtual environments:
 
 ```bash
-# Update Control Panel to the latest version
-panel update
+# Using virtualenv
+panel register --name flask-app \
+  --command "/path/to/venv/bin/python /path/to/app.py" \
+  --path "/path/to/app" \
+  --port 5000
 ```
 
-This will:
-1. Pull the latest code if running from a git repository
-2. Run the installation script
-3. Update all dependencies
+Do not use `source venv/bin/activate` in your command. Instead, directly use the Python executable inside the virtual environment.
 
-### Uninstallation
+## Port Detection
 
-To completely remove Control Panel from your system while preserving your configuration:
+Control Panel can automatically detect the port being used by a service, even if the application chooses its own port:
 
-```bash
-# Run the uninstall command with default backup
-panel uninstall
-```
+1. For services that set their own port:
+   ```bash
+   # After registering, detect the actual port
+   panel edit service-name --detect-port
+   ```
 
-This will:
-1. Create a backup of your configuration
-2. Stop and disable all registered services
-3. Remove service templates from systemd
-4. Preserve your service configurations for future reinstalls
-
-To completely remove everything including configurations:
-
-```bash
-# Force complete removal
-panel uninstall --no-backup
-```
-
-To restore your settings after reinstalling:
-
-```bash
-# After reinstalling, restore settings from backup
-panel restore
-```
+2. This feature is particularly useful for applications like ComfyUI that have a fixed port (8188)
 
 ## Troubleshooting
 
@@ -393,37 +375,8 @@ If your service uses a Python virtual environment, **do not** use `source venv/b
 # source venv/bin/activate && python app.py
 
 # Use:
-panel register --name my-app --command "/path/to/venv/bin/python /path/to/app.py" --path "/path/to" --port 8000
+panel register --name my-app --command "/path/to/venv/bin/python /path/to/app.py" --port 8000
 ```
-
-### npm Applications
-
-For Node.js applications using npm:
-
-1. Always include `cd` in the command to ensure npm can find the package.json file:
-   ```bash
-   panel register --name my-app --command "cd /path/to/app && /usr/bin/npm start" --path "/path/to/app"
-   ```
-
-2. Set the path to the directory containing the package.json file.
-
-3. For reliable service management, use the full path to the npm executable (usually `/usr/bin/npm`).
-
-4. If your app requires specific environment variables, add them with the `--env` flag:
-   ```bash
-   panel register --name my-app --command "cd /path/to/app && /usr/bin/npm start" --path "/path/to/app" --env NODE_ENV=production
-   ```
-
-### Auto-detecting Ports
-
-If your application sets its own port internally:
-
-1. Use the `--detect-port` option when editing a service to automatically detect the actual port being used:
-   ```bash
-   panel edit my-service --detect-port
-   ```
-
-2. When starting your service, Control Panel will detect if the service is using a different port than configured and update its configuration accordingly.
 
 ### The list command shows an error
 

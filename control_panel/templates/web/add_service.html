@@ -25,9 +25,9 @@
     </div>
     
     <div class="mb-3">
-        <label for="directory" class="form-label">Working Directory (Optional)</label>
-        <input type="text" class="form-control" id="directory" name="directory">
-        <div class="form-text">Leave empty to use your home directory</div>
+        <label for="path" class="form-label">Path (Optional)</label>
+        <input type="text" class="form-control" id="path" name="path">
+        <div class="form-text">Working directory path for the service (leave empty to use your home directory)</div>
     </div>
     
     <div class="mb-3">
@@ -43,6 +43,16 @@
         <label for="env_vars" class="form-label">Environment Variables (Optional)</label>
         <textarea class="form-control" id="env_vars" name="env_vars" rows="3"></textarea>
         <div class="form-text">One variable per line in KEY=VALUE format (e.g., DEBUG=1)</div>
+    </div>
+    
+    <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="auto_start" name="auto_start">
+        <label class="form-check-label" for="auto_start">Enable auto-start at system boot</label>
+    </div>
+
+    <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="start_now" name="start_now" checked>
+        <label class="form-check-label" for="start_now">Start service immediately</label>
     </div>
     
     <button type="submit" class="btn btn-primary">Register Service</button>

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Control Panel{% endblock %}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/metrics.css">
     <style>
         body {
             padding-top: 2rem;
@@ -34,6 +35,62 @@
             </nav>
         </header>
 
+        <!-- Metrics Widget -->
+        <div class="metrics-widget">
+            <h4>System Metrics</h4>
+            <div class="metrics-container">
+                <!-- CPU Section -->
+                <div class="metric-group">
+                    <div class="metric-item">
+                        <div class="metric-label">
+                            CPU Usage <span id="cpu-usage-value" class="metric-value">0%</span>
+                        </div>
+                        <div class="progress">
+                            <div id="cpu-usage" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- CPU Temperature -->
+                    <div class="temperature-group" id="cpu-temp-container" style="display: none;">
+                        <!-- CPU temperature items will be added here dynamically -->
+                    </div>
+                </div>
+                
+                <!-- Memory Section -->
+                <div class="metric-group">
+                    <div class="metric-item">
+                        <div class="metric-label">
+                            Memory Usage <span id="memory-usage-value" class="metric-value">0%</span>
+                        </div>
+                        <div class="progress">
+                            <div id="memory-usage" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="text-muted small" id="memory-details">0 B / 0 B</div>
+                    </div>
+                </div>
+                
+                <!-- Disk Section -->
+                <div class="metric-group">
+                    <div class="metric-item">
+                        <div class="metric-label">
+                            Disk Usage <span id="disk-usage-value" class="metric-value">0%</span>
+                        </div>
+                        <div class="progress">
+                            <div id="disk-usage" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="text-muted small" id="disk-details">0 B / 0 B</div>
+                    </div>
+                </div>
+                
+                <!-- GPU Section -->
+                <div class="metric-group" id="gpu-section" style="display: none;">
+                    <div id="gpu-container">
+                        <!-- GPU metrics will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <main>
             {% block content %}{% endblock %}
         </main>
@@ -48,6 +105,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/metrics.js"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

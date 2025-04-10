@@ -1,0 +1,16 @@
+# Include templates and static files
+recursive-include templates *
+recursive-include static *
+
+# Copy templates and static files into the package
+recursive-include control_panel/templates *
+recursive-include control_panel/static *
+
+# Include example configs
+recursive-include examples *
+
+# Include documentation
+include README.md
+
+# Include shell scripts
+include *.sh

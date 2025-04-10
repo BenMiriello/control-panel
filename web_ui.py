@@ -11,6 +11,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for
 
 from utils.config import load_config, save_config
 from utils.service import register_service, unregister_service, get_service_status, control_service
+from utils.system_metrics import get_all_metrics
 
 app = Flask(__name__, 
            template_folder=str(Path(__file__).resolve().parent / 'templates' / 'web'),
@@ -38,6 +39,11 @@ def index():
     port_ranges = config.get("port_ranges", {})
     
     return render_template('index.html', services=services, port_ranges=port_ranges)
+
+@app.route('/api/metrics')
+def get_metrics():
+    """API endpoint to get current system metrics"""
+    return jsonify(get_all_metrics())
 
 @app.route('/services/control/<name>/<action>')
 def service_control(name, action):

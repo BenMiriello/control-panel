@@ -21,6 +21,7 @@
                 <h5 class="mb-0">{{ service.name }}</h5>
                 <div>
                     {% if service.status == 'active' %}
+		    <a href="javascript:void(0)" onclick="window.open('http://'+window.location.hostname+':{{ service.port }}', '_blank')" class="badge bg-primary" style="color: #ffffff; text-decoration: none">Open</a>
                     <span class="badge bg-success">Running</span>
                     {% else %}
                     <span class="badge bg-danger">Stopped</span>

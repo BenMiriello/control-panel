@@ -11,15 +11,17 @@ from pathlib import Path
 from tabulate import tabulate
 
 # Import from package-relative paths
-from control_panel.utils.config import load_config, save_config, CONFIG_DIR, CONFIG_FILE
-from control_panel.utils.service import register_service, unregister_service, get_service_status, control_service, detect_service_port
-
-# Add node helper imports for compatibility with control.py
 try:
+    from control_panel.utils.config import load_config, save_config, CONFIG_DIR, CONFIG_FILE
+    from control_panel.utils.service import register_service, unregister_service, get_service_status, control_service, detect_service_port
     from control_panel.utils.node_helper import kill_process_by_port, get_node_service_command
+    PACKAGE_MODE = True
 except ImportError:
     # Fallback to local imports if package is not fully installed
+    from utils.config import load_config, save_config, CONFIG_DIR, CONFIG_FILE
+    from utils.service import register_service, unregister_service, get_service_status, control_service, detect_service_port
     from utils.node_helper import kill_process_by_port, get_node_service_command
+    PACKAGE_MODE = False
 
 def get_service_names():
     """Get a list of all registered service names"""
@@ -228,7 +230,7 @@ def start(name):
 @cli.command()
 @click.argument('name')
 @click.option('--force', is_flag=True, help='Force kill the process')
-def stop(name):
+def stop(name, force=False):
     """Stop a service"""
     config = load_config()
     
@@ -243,7 +245,7 @@ def stop(name):
     
     # Additionally kill any process that might be using the port
     port = config["services"][name]["port"]
-    kill_result, kill_msg = kill_process_by_port(port)
+    kill_result, kill_msg = kill_process_by_port(port, force)
     
     if kill_result:
         click.echo(f"Killed processes on port {port}: {kill_msg}")
@@ -309,6 +311,34 @@ def disable(name):
     save_config(config)
     
     click.echo(f"Service '{name}' disabled from starting automatically")
+
+# Combined command that enables auto-start and starts the service (commonly used together)
+@cli.command()
+@click.argument('name')
+def auto(name):
+    """Enable a service to auto-start at system boot and start it now"""
+    # First enable auto-start
+    config = load_config()
+    
+    if name not in config["services"]:
+        click.echo(f"Error: Service '{name}' not found")
+        return
+    
+    subprocess.run(["systemctl", "--user", "enable", f"control-panel@{name}.service"])
+    
+    # Update config
+    config["services"][name]["enabled"] = True
+    save_config(config)
+    
+    click.echo(f"Service '{name}' enabled to start automatically")
+    
+    # Now start the service
+    success, error = control_service(name, "start")
+    if not success:
+        click.echo(f"Error starting service: {error}")
+        click.echo(f"Check logs with: panel logs {name}")
+    else:
+        click.echo(f"Service '{name}' started successfully")
 
 @cli.command()
 @click.argument('name')
@@ -413,11 +443,16 @@ def restore(backup_file):
 def web(host, port, no_browser):
     """Start the web UI"""
     # Import here to avoid circular imports
+    import threading
     try:
         from control_panel.web_ui import start_web_ui
     except ImportError:
         # Fallback to local import if package is not fully installed
-        from web_ui import start_web_ui
+        try:
+            from web_ui import start_web_ui
+        except ImportError:
+            click.echo("Error: web_ui module not found!")
+            return
     
     click.echo(f"Starting Control Panel web UI at http://{host}:{port}")
     start_web_ui(host=host, port=port, debug=False, open_browser=not no_browser)

@@ -63,8 +63,8 @@ def create_app():
                 
                 template_folder = str(package_template_dir)
                 static_folder = str(package_static_dir)
-                click.echo(f"Copied templates to {template_folder}")
-                click.echo(f"Copied static files to {static_folder}")
+                print(f"Copied templates to {template_folder}")
+                print(f"Copied static files to {static_folder}")
             else:
                 # Use package directories
                 template_folder = str(Path(__file__).resolve().parent / 'templates' / 'web')
@@ -73,7 +73,7 @@ def create_app():
             if not os.path.exists(template_folder):
                 template_folder = str(Path.cwd() / 'templates' / 'web')
                 static_folder = str(Path.cwd() / 'static')
-                click.echo(f"Using templates from current directory: {template_folder}")
+                print(f"Using templates from current directory: {template_folder}")
                 
             app = Flask(__name__, 
                        template_folder=template_folder,
@@ -85,7 +85,7 @@ def create_app():
             app = Flask(__name__, 
                        template_folder=template_folder,
                        static_folder=static_folder)
-            click.echo(f"Warning: Using templates and static files from current directory due to error: {e}")
+            print(f"Warning: Using templates and static files from current directory due to error: {e}")
     else:
         # In local mode, we need to use the local file paths
         template_folder = str(Path(__file__).resolve().parent.parent / 'templates' / 'web')
@@ -233,27 +233,27 @@ def view_logs(name):
     
     return render_template('logs.html', name=name, logs=logs)
 
-def start_web_ui(host='127.0.0.1', port=9000, debug=False, open_browser=True):
+def start_web_ui(host='0.0.0.0', port=9000, debug=False, open_browser=True):
     """Start the web UI"""
     if open_browser:
         # Open browser in a separate thread after a delay
         def open_browser_delayed():
             time.sleep(1)
-            webbrowser.open(f'http://{host}:{port}')
+            webbrowser.open(f'http://localhost:{port}')
         
         threading.Thread(target=open_browser_delayed).start()
     
+    print(f"Starting Control Panel web UI at http://{host}:{port}")
+    print(f"Template folder: {app.template_folder}")
+    print(f"Static folder: {app.static_folder}")
     app.run(host=host, port=port, debug=debug)
 
 @click.command()
-@click.option('--host', default='127.0.0.1', help='Host to bind to')
+@click.option('--host', default='0.0.0.0', help='Host to bind to')
 @click.option('--port', default=9000, type=int, help='Port to listen on')
 @click.option('--no-browser', is_flag=True, help='Do not open browser automatically')
 def main(host, port, no_browser):
     """Start the web UI for Control Panel"""
-    click.echo(f"Starting Control Panel web UI at http://{host}:{port}")
-    click.echo(f"Template folder: {app.template_folder}")
-    click.echo(f"Static folder: {app.static_folder}")
     start_web_ui(host=host, port=port, debug=False, open_browser=not no_browser)
 
 if __name__ == '__main__':

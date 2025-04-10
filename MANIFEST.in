@@ -1,0 +1,12 @@
+# Include templates and static files
+recursive-include templates *
+recursive-include static *
+
+# Include example configs
+recursive-include examples *
+
+# Include documentation
+include README.md
+
+# Include shell scripts
+include *.sh

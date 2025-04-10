@@ -6,6 +6,8 @@ import time
 import click
 import subprocess
 import webbrowser
+import importlib.resources
+import pkg_resources
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
@@ -24,21 +26,42 @@ except ImportError:
     PACKAGE_MODE = False
 
 # Handle template and static paths correctly whether running from package or local directory
-def get_app():
+def create_app():
+    """Create and configure the Flask app"""
     if PACKAGE_MODE:
-        # In package mode, we need to use the package resource paths
-        template_folder = None  # Flask will use default package resources
-        static_folder = None    # Flask will use default package resources
-        app = Flask('control_panel')
+        # In package mode, we need to locate the templates and static files within the package
+        try:
+            # First try to find the templates and static folders using pkg_resources
+            template_folder = pkg_resources.resource_filename('control_panel', 'templates/web')
+            static_folder = pkg_resources.resource_filename('control_panel', 'static')
+            
+            # Fall back to looking for them relative to the current file if they're not in the package
+            if not os.path.exists(template_folder):
+                template_folder = str(Path(__file__).resolve().parent.parent / 'templates' / 'web')
+                static_folder = str(Path(__file__).resolve().parent.parent / 'static')
+                
+            app = Flask(__name__, 
+                       template_folder=template_folder,
+                       static_folder=static_folder)
+        except Exception as e:
+            # If all else fails, use the template and static folders relative to the current directory
+            template_folder = str(Path.cwd() / 'templates' / 'web')
+            static_folder = str(Path.cwd() / 'static')
+            app = Flask(__name__, 
+                       template_folder=template_folder,
+                       static_folder=static_folder)
+            print(f"Warning: Using templates and static files from current directory: {e}")
     else:
         # In local mode, we need to use the local file paths
-        template_folder = str(Path(__file__).resolve().parent / 'templates' / 'web')
-        static_folder = str(Path(__file__).resolve().parent / 'static')
-        app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
+        template_folder = str(Path(__file__).resolve().parent.parent / 'templates' / 'web')
+        static_folder = str(Path(__file__).resolve().parent.parent / 'static')
+        app = Flask(__name__, 
+                   template_folder=template_folder,
+                   static_folder=static_folder)
     
     return app
 
-app = get_app()
+app = create_app()
 
 @app.route('/')
 def index():
@@ -195,6 +218,8 @@ def start_web_ui(host='127.0.0.1', port=9000, debug=False, open_browser=True):
 def main(host, port, no_browser):
     """Start the web UI for Control Panel"""
     click.echo(f"Starting Control Panel web UI at http://{host}:{port}")
+    click.echo(f"Template folder: {app.template_folder}")
+    click.echo(f"Static folder: {app.static_folder}")
     start_web_ui(host=host, port=port, debug=False, open_browser=not no_browser)
 
 if __name__ == '__main__':

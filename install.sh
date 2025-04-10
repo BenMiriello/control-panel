@@ -21,6 +21,17 @@ pip uninstall -y flask werkzeug || true
 echo "Installing package..."
 pip install -e .
 
+# Merge CLI parts and Web UI parts if they exist
+if [ -f "control_panel/cli_part2.py" ] || [ -f "control_panel/cli_part3.py" ]; then
+    echo "Merging CLI parts..."
+    python -m control_panel.merge_cli_parts
+fi
+
+if [ -f "control_panel/web_ui_part2.py" ] || [ -f "control_panel/web_ui_part3.py" ]; then
+    echo "Merging Web UI parts..."
+    python -m control_panel.merge_web_ui_parts
+fi
+
 # Create configuration directory
 mkdir -p ~/.config/control-panel/env
 
@@ -36,8 +47,27 @@ mkdir -p ~/.config/systemd/user/
 # Copy service template to systemd user directory
 cp ./control_panel/templates/service-template.service ~/.config/systemd/user/control-panel@.service
 
+# Create Control Panel service for auto-start
+cat > ~/.config/systemd/user/control-panel.service << EOL
+[Unit]
+Description=Control Panel Web UI
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${HOME}/.local/bin/panel web --background
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOL
+
 # Reload systemd user configuration
 systemctl --user daemon-reload
+
+# Enable the Control Panel service for auto-start
+systemctl --user enable control-panel.service
 
 # Detect shell and install shell completion
 SHELL_TYPE=""
@@ -72,13 +102,17 @@ fi
 
 echo "Control Panel installation complete!"
 echo ""
+echo "Control Panel will now auto-start at system boot."
+echo "To start the Control Panel web interface immediately, run:"
+echo "  systemctl --user start control-panel.service"
+echo ""
 echo "You can now use the 'panel' command to manage your services:"
 echo "  panel list                    - List all services"
 echo "  panel register --help         - Get help with registering a service"
-echo "  panel web                     - Start the web UI"
+echo "  panel web                     - Start the web UI in foreground mode"
 echo ""
-echo "Example - register a service:"
-echo "  panel register --name my-service --command '/path/to/start-script.sh' --port 8080"
+echo "Example - register a Node.js service:"
+echo "  panel register --name node-app --command 'cd /path/to/app && /usr/bin/npm start' --path /path/to/app --auto"
 echo ""
 echo "To uninstall Control Panel:"
 echo "  panel uninstall"

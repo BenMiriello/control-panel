@@ -84,7 +84,7 @@ class MetricsWidget {
                     `${this.formatBytes(gpu.memory_used * 1024 * 1024)} / ${this.formatBytes(gpu.memory_total * 1024 * 1024)}`;
                 
                 const tempElement = document.getElementById(`${gpuId}-temp`);
-                tempElement.textContent = `${gpu.temperature.toFixed(1)}\u00b0C`;
+                tempElement.textContent = `${gpu.temperature.toFixed(1)}°C`;
                 this.updateTemperatureClass(tempElement, gpu.temperature);
             });
         } else {
@@ -112,7 +112,7 @@ class MetricsWidget {
                 
                 const value = document.createElement('span');
                 value.className = 'temperature-value';
-                value.textContent = `${sensor.temp.toFixed(1)}\u00b0C`;
+                value.textContent = `${sensor.temp.toFixed(1)}°C`;
                 this.updateTemperatureClass(value, sensor.temp);
                 
                 tempItem.appendChild(label);
@@ -177,7 +177,7 @@ class MetricsWidget {
         // GPU Temperature
         const tempItem = document.createElement('div');
         tempItem.className = 'temperature-item';
-        tempItem.innerHTML = `<span class="temperature-label">Temperature</span><span id="${gpuId}-temp" class="temperature-value temp-normal">0\u00b0C</span>`;
+        tempItem.innerHTML = `<span class="temperature-label">Temperature</span><span id="${gpuId}-temp" class="temperature-value temp-normal">0°C</span>`;
         
         // Add all elements to the container
         gpuSection.appendChild(usageLabel);
@@ -207,12 +207,12 @@ class MetricsWidget {
     /**
      * Format bytes to human-readable format
      */
-    formatBytes(bytes, decimals = 2) {
-        if (bytes === 0) return '0 B';
+    formatBytes(bytes, decimals = 1) {
+        if (bytes === 0) return '0 Bytes';
         
         const k = 1024;
         const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
         
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         
@@ -220,8 +220,8 @@ class MetricsWidget {
     }
 }
 
-// Initialize metrics widget when the page loads
+// Initialize widget when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    const metricsWidget = new MetricsWidget();
+    const metricsWidget = new MetricsWidget(1000); // Update every 1 second
     metricsWidget.init();
 });

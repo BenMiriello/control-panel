@@ -23,7 +23,7 @@ cd control-panel
 ./install.sh
 
 # Register a new service
-panel register --name my-service --command "/absolute/path/to/executable args" --port 8080
+panel register --name my-service --command "/absolute/path/to/executable args" --port 8080 --auto
 
 # List all services
 panel list
@@ -139,8 +139,14 @@ If you're having trouble accessing the web UI from other devices:
 ### Registering a Service
 
 ```bash
-panel register --name service-name --command "COMMAND" --port PORT [--dir DIRECTORY] [--env KEY=VALUE]
+panel register --name service-name --command "COMMAND" --port PORT [--path DIRECTORY] [--env KEY=VALUE] [--auto] [--start]
 ```
+
+#### New Options
+
+- `--auto`: Enable the service to auto-start at system boot 
+- `--start`: Start the service immediately after registration
+- `--path`: Working directory for the service (replaces the old `--dir` option, but both still work)
 
 #### About the Command Parameter
 
@@ -158,13 +164,16 @@ The `--command` parameter must be the exact command you would run in a terminal 
 panel register --name simple-service --command "/usr/local/bin/myservice" --port 8080
 
 # Node.js application
-panel register --name node-api --command "/usr/bin/node /home/user/projects/api/server.js" --port 3000
+panel register --name node-api --command "cd /home/user/projects/api && /usr/bin/node /home/user/projects/api/server.js" --path /home/user/projects/api --port 3000 --auto
+
+# Node.js application using npm
+panel register --name file-browser --command "cd /home/user/Documents/file-browser && /usr/bin/npm start" --path /home/user/Documents/file-browser --port 3002 --auto
 
 # Python application using virtualenv
-panel register --name flask-app --command "/home/user/projects/flask-app/venv/bin/python /home/user/projects/flask-app/app.py" --port 5000
+panel register --name flask-app --command "/home/user/projects/flask-app/venv/bin/python /home/user/projects/flask-app/app.py" --path "/home/user/projects/flask-app" --port 5000
 
 # Python application with working directory
-panel register --name django-app --command "/home/user/projects/django-app/venv/bin/python manage.py runserver 0.0.0.0:8000" --dir "/home/user/projects/django-app"
+panel register --name django-app --command "/home/user/projects/django-app/venv/bin/python manage.py runserver 0.0.0.0:8000" --path "/home/user/projects/django-app"
 
 # Java application with arguments
 panel register --name spring-app --command "/usr/bin/java -jar /home/user/apps/myapp.jar --server.port=8080" --port 8080
@@ -182,20 +191,26 @@ panel list
 # Start a service
 panel start service-name
 
+# Start a service and view its logs
+panel start service-name --log
+
 # Stop a service
 panel stop service-name
 
 # Restart a service
 panel restart service-name
 
-# Enable automatic startup
-panel enable service-name
+# Enable automatic startup and start the service
+panel auto service-name
 
 # Disable automatic startup
 panel disable service-name
 
 # View logs for a service
 panel logs service-name
+
+# Edit a service's configuration
+panel edit service-name --command "new command" --path "new/path" --detect-port
 
 # Unregister a service
 panel unregister service-name
@@ -276,6 +291,17 @@ All service configurations are stored in `~/.config/control-panel/services.json`
 
 Control Panel uses systemd to manage service startup. Each registered service gets a systemd user service that can be managed through the Control Panel interface.
 
+### Auto-starting Control Panel
+
+After installation, Control Panel itself is set to auto-start at system boot. This ensures that all of your registered services that are set to auto-start will be properly managed even after system reboots.
+
+The Control Panel web UI can also be configured to auto-start:
+
+```bash
+# Start the web UI and enable it to auto-start
+panel web --background --auto
+```
+
 ## Installation, Update, and Uninstallation
 
 ### Installation
@@ -292,6 +318,7 @@ This will:
 3. Set up necessary directories and configuration
 4. Make the `panel` command available
 5. Install shell completion
+6. Configure Control Panel to auto-start at system boot
 
 ### Updating
 
@@ -366,8 +393,37 @@ If your service uses a Python virtual environment, **do not** use `source venv/b
 # source venv/bin/activate && python app.py
 
 # Use:
-panel register --name my-app --command "/path/to/venv/bin/python /path/to/app.py" --port 8000
+panel register --name my-app --command "/path/to/venv/bin/python /path/to/app.py" --path "/path/to" --port 8000
 ```
+
+### npm Applications
+
+For Node.js applications using npm:
+
+1. Always include `cd` in the command to ensure npm can find the package.json file:
+   ```bash
+   panel register --name my-app --command "cd /path/to/app && /usr/bin/npm start" --path "/path/to/app"
+   ```
+
+2. Set the path to the directory containing the package.json file.
+
+3. For reliable service management, use the full path to the npm executable (usually `/usr/bin/npm`).
+
+4. If your app requires specific environment variables, add them with the `--env` flag:
+   ```bash
+   panel register --name my-app --command "cd /path/to/app && /usr/bin/npm start" --path "/path/to/app" --env NODE_ENV=production
+   ```
+
+### Auto-detecting Ports
+
+If your application sets its own port internally:
+
+1. Use the `--detect-port` option when editing a service to automatically detect the actual port being used:
+   ```bash
+   panel edit my-service --detect-port
+   ```
+
+2. When starting your service, Control Panel will detect if the service is using a different port than configured and update its configuration accordingly.
 
 ### The list command shows an error
 

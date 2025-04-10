@@ -173,3 +173,6 @@ def edit(name, command, port, path, env_add, env_remove, detect_port):
     click.echo(f"Service '{name}' updated successfully")
     click.echo("You will need to restart the service for changes to take effect:")
     click.echo(f"  panel restart {name}")
+
+# Export the CLI function as main for entry_point in setup.py
+main = cli

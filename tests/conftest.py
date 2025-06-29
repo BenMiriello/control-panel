@@ -12,7 +12,21 @@ def temp_config_dir():
     with tempfile.TemporaryDirectory() as temp_dir:
         config_dir = Path(temp_dir) / ".config" / "control-panel"
         config_dir.mkdir(parents=True)
+        # Create backup and env directories
+        (config_dir / "backups").mkdir()
+        (config_dir / "env").mkdir()
         yield config_dir
+
+
+@pytest.fixture
+def isolated_config(temp_config_dir):
+    """Completely isolate tests from real config files"""
+    with patch("utils.config.CONFIG_DIR", temp_config_dir), patch(
+        "utils.config.CONFIG_FILE", temp_config_dir / "services.json"
+    ), patch("utils.config.ENV_DIR", temp_config_dir / "env"), patch(
+        "utils.config.BACKUP_DIR", temp_config_dir / "backups"
+    ):
+        yield temp_config_dir
 
 
 @pytest.fixture

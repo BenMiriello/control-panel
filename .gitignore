@@ -39,3 +39,8 @@ Thumbs.db
 # Control Panel specific
 **/backups/
 *.json.backup
+
+# Systemd output files
+ystemctl*
+
+notes/

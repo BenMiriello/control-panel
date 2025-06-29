@@ -3,8 +3,9 @@
 import subprocess
 from pathlib import Path
 from .config import load_config, save_config, find_available_port, create_env_file, ENV_DIR
+from .script_manager import get_effective_command, create_run_script
 
-def register_service(name, command, port, working_dir, range_name, env_vars):
+def register_service(name, command, port, working_dir, range_name, env_vars, project_dir=None):
     """Register a new service"""
     config = load_config()
     
@@ -28,7 +29,8 @@ def register_service(name, command, port, working_dir, range_name, env_vars):
         "port": port,
         "working_dir": working_dir or str(Path.home()),
         "enabled": False,
-        "env": {}
+        "env": {},
+        "project_dir": project_dir  # Add optional project directory
     }
     
     # Process environment variables
@@ -46,6 +48,13 @@ def register_service(name, command, port, working_dir, range_name, env_vars):
     
     # Create environment file
     create_env_file(name, service_config)
+    
+    # Create run_panel.sh if project_dir is specified
+    if project_dir:
+        success, result = create_run_script(name, service_config, project_dir)
+        if not success:
+            # Log warning but don't fail registration
+            print(f"Warning: Could not create run_panel.sh: {result}")
     
     return True, port
 
@@ -97,6 +106,12 @@ def control_service(name, action):
     
     if name not in config["services"]:
         return False, f"Service '{name}' not found"
+    
+    # Update environment file with effective command before starting
+    if action in ["start", "restart"]:
+        service_config = config["services"][name]
+        effective_command = get_effective_command(name, service_config)
+        create_env_file(name, service_config, effective_command)
     
     result = subprocess.run(
         ["systemctl", "--user", action, f"control-panel@{name}.service"],

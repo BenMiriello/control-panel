@@ -50,11 +50,14 @@ def find_available_port(port_range):
     
     raise ValueError(f"No available ports in range {start}-{end}")
 
-def create_env_file(name, service_config):
+def create_env_file(name, service_config, effective_command=None):
     """Create an environment file for a service"""
     env_file = ENV_DIR / f"{name}.env"
+    command = effective_command or service_config['command']
+    working_dir = service_config.get('working_dir', str(Path.home()))
     with open(env_file, 'w') as f:
-        f.write(f"COMMAND={service_config['command']}\n")
+        f.write(f"COMMAND={command}\n")
+        f.write(f"WORKING_DIR={working_dir}\n")
         f.write(f"PORT={service_config['port']}\n")
         for key, value in service_config.get("env", {}).items():
             f.write(f"{key}={value}\n")

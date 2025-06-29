@@ -62,12 +62,13 @@ def cli():
 @click.option('--command', required=True, help='Command to start the service')
 @click.option('--port', type=int, help='Port to run on (optional, will auto-assign if not specified)')
 @click.option('--path', '--dir', default='', help='Working directory/path for the service (defaults to home directory)')
+@click.option('--script-dir', help='Project directory where run_panel.sh will be created')
 @click.option('--range', 'range_name', default='default', help='Port range to use for auto-assignment')
 @click.option('--env', multiple=True, help='Environment variables in KEY=VALUE format')
 @click.option('--auto', is_flag=True, help='Enable service to auto-start at system boot')
 @click.option('--start', is_flag=True, help='Start service immediately after registration')
 @click.option('--nodejs', is_flag=True, help='Optimize for Node.js service')
-def register(name, command, port, path, range_name, env, auto, start, nodejs=False):
+def register(name, command, port, path, script_dir, range_name, env, auto, start, nodejs=False):
     """Register a new service"""
     # For backwards compatibility - path is preferred name
     working_dir = path
@@ -78,7 +79,7 @@ def register(name, command, port, path, range_name, env, auto, start, nodejs=Fal
         command = get_node_service_command(script_path, working_dir)
         click.echo(f"Optimized Node.js command: {command}")
     
-    success, result = register_service(name, command, port, working_dir, range_name, env)
+    success, result = register_service(name, command, port, working_dir, range_name, env, script_dir)
     
     if not success:
         click.echo(f"Error: {result}")

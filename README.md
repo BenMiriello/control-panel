@@ -1,10 +1,10 @@
 # Control Panel
 
-A simple service manager for Linux that makes it easy to run and manage multiple applications from one place.
+A simple service manager for Linux to make it easy to run and manage multiple applications from one place.
 
-## What it does
+## But Why?
 
-Instead of juggling multiple terminal windows or remembering different startup commands, Control Panel lets you register all your services once and then start/stop them with simple commands. It handles ports, auto-startup, and gives you both a CLI and web interface.
+Instead of juggling multiple terminal windows or remembering different startup commands, register all your services once and then start/stop them with simple commands. Panel centralizes port allocation, allows auto-start and other helpful abstractions. Manage everything through the cli tool and built-in web UI.
 
 ## Quick start
 
@@ -73,12 +73,24 @@ The installer sets up:
 - Systemd integration for auto-startup
 - Configuration in `~/.config/control-panel/`
 
-## Common gotchas
+## Tips
 
-- Use full paths for commands: `/usr/bin/node app.js` not just `node app.js`
-- For Python virtualenvs: use `/path/to/venv/bin/python` directly
-- For Node apps with npm: `"cd /path && npm start"` works better than npm scripts
-- Services need to respect the `PORT` environment variable if you want auto-port assignment
+### Process and Environment:
+- Use absolute paths for executables - systemd has a minimal PATH
+- Set working directory with --dir if your app expects to run from its own folder
+- Apps that need environment variables should get them explicitly, not from your shell profile
+- Services that fork/daemonize themselves can confuse systemd - use foreground mode
+- If your app creates files, make sure the service user has write permissions
+
+### Network and Ports:
+- If using auto-port assignment, read the PORT env var in your app
+- Check if your app has built-in port configuration that conflicts with Control Panel
+
+## Debugging:
+- `start` and `restart` commands may succeed initially but still fail after.
+- Use panel logs service-name for detailed debugging info.
+- Test commands manually first: cd /app/dir && /full/path/to/command
+
 
 ## Requirements
 
@@ -88,4 +100,4 @@ The installer sets up:
 
 ---
 
-Built for developers who want to stop thinking about service management and get back to building.
+Simplify service management and get back to building.

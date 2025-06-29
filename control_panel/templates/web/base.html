@@ -104,8 +104,14 @@
         </footer>
     </div>
 
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+        <!-- Toasts will be inserted here dynamically -->
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/js/metrics.js"></script>
+    <script src="/static/js/toast-manager.js"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

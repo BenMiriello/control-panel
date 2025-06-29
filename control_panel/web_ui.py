@@ -129,27 +129,33 @@ def service_control(name, action):
     if action in ['start', 'stop', 'restart']:
         success, error = control_service(name, action)
         if not success:
-            return jsonify({'status': 'error', 'message': error})
+            return redirect(url_for('index', action=action, service=name, status='error', message=error))
     elif action == 'enable':
         config = load_config()
         if name not in config["services"]:
-            return jsonify({'status': 'error', 'message': f"Service '{name}' not found"})
+            return redirect(url_for('index', action=action, service=name, status='error', message=f"Service '{name}' not found"))
         
-        subprocess.run(["systemctl", "--user", "enable", f"control-panel@{name}.service"])
+        result = subprocess.run(["systemctl", "--user", "enable", f"control-panel@{name}.service"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return redirect(url_for('index', action=action, service=name, status='error', message=result.stderr))
+        
         config["services"][name]["enabled"] = True
         save_config(config)
     elif action == 'disable':
         config = load_config()
         if name not in config["services"]:
-            return jsonify({'status': 'error', 'message': f"Service '{name}' not found"})
+            return redirect(url_for('index', action=action, service=name, status='error', message=f"Service '{name}' not found"))
         
-        subprocess.run(["systemctl", "--user", "disable", f"control-panel@{name}.service"])
+        result = subprocess.run(["systemctl", "--user", "disable", f"control-panel@{name}.service"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return redirect(url_for('index', action=action, service=name, status='error', message=result.stderr))
+        
         config["services"][name]["enabled"] = False
         save_config(config)
     else:
-        return jsonify({'status': 'error', 'message': f"Unknown action: {action}"})
+        return redirect(url_for('index', action=action, service=name, status='error', message=f"Unknown action: {action}"))
     
-    return redirect(url_for('index'))
+    return redirect(url_for('index', action=action, service=name, status='success'))
 
 @app.route('/services/add', methods=['GET', 'POST'])
 def add_service():
@@ -165,16 +171,16 @@ def add_service():
             try:
                 port = int(port)
             except ValueError:
-                return jsonify({'status': 'error', 'message': 'Port must be a number'})
+                return redirect(url_for('index', action='register', service=name or 'unknown', status='error', message='Port must be a number'))
         else:
             port = None
         
         success, result = register_service(name, command, port, directory, range_name, env_vars)
         
         if not success:
-            return jsonify({'status': 'error', 'message': result})
+            return redirect(url_for('index', action='register', service=name, status='error', message=result))
         
-        return redirect(url_for('index'))
+        return redirect(url_for('index', action='register', service=name, status='success'))
     
     # GET request - show form
     config = load_config()
@@ -185,9 +191,9 @@ def add_service():
 def delete_service(name):
     success, error = unregister_service(name)
     if not success:
-        return jsonify({'status': 'error', 'message': error})
+        return redirect(url_for('index', action='delete', service=name, status='error', message=error))
     
-    return redirect(url_for('index'))
+    return redirect(url_for('index', action='delete', service=name, status='success'))
 
 @app.route('/ranges/add', methods=['GET', 'POST'])
 def add_range():

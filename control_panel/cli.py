@@ -216,129 +216,19 @@ def list():
     headers = ["Service", "Port", "Status", "Auto-start", "Command"]
     click.echo(tabulate(rows, headers=headers, tablefmt="simple"))
 
-@cli.command()
-@click.argument('name')
-def start(name):
-    """Start a service"""
-    success, error = control_service(name, "start")
-    if not success:
-        click.echo(f"Error: {error}")
-        return
-    
-    click.echo(f"Service '{name}' started")
+# Import service lifecycle commands
+try:
+    from control_panel.cli.service_commands import start, stop, restart, enable, disable, auto
+except ImportError:
+    from cli.service_commands import start, stop, restart, enable, disable, auto
 
-@cli.command()
-@click.argument('name')
-@click.option('--force', is_flag=True, help='Force kill the process')
-def stop(name, force=False):
-    """Stop a service"""
-    config = load_config()
-    
-    if name not in config["services"]:
-        click.echo(f"Error: Service '{name}' not found")
-        return
-    
-    # First try to stop through systemd
-    success, error = control_service(name, "stop")
-    if not success:
-        click.echo(f"Warning: {error}")
-    
-    # Additionally kill any process that might be using the port
-    port = config["services"][name]["port"]
-    kill_result, kill_msg = kill_process_by_port(port, force)
-    
-    if kill_result:
-        click.echo(f"Killed processes on port {port}: {kill_msg}")
-    
-    click.echo(f"Service '{name}' stopped")
-
-@cli.command()
-@click.argument('name')
-def restart(name):
-    """Restart a service"""
-    # First stop (with cleanup)
-    config = load_config()
-    
-    if name not in config["services"]:
-        click.echo(f"Error: Service '{name}' not found")
-        return
-    
-    # Stop service and kill processes
-    success, error = control_service(name, "stop")
-    port = config["services"][name]["port"]
-    kill_process_by_port(port)
-    
-    # Start service again
-    success, error = control_service(name, "start")
-    if not success:
-        click.echo(f"Error restarting: {error}")
-        return
-    
-    click.echo(f"Service '{name}' restarted")
-
-@cli.command()
-@click.argument('name')
-def enable(name):
-    """Enable a service to start automatically"""
-    config = load_config()
-    
-    if name not in config["services"]:
-        click.echo(f"Error: Service '{name}' not found")
-        return
-    
-    subprocess.run(["systemctl", "--user", "enable", f"control-panel@{name}.service"])
-    
-    # Update config
-    config["services"][name]["enabled"] = True
-    save_config(config)
-    
-    click.echo(f"Service '{name}' enabled to start automatically")
-
-@cli.command()
-@click.argument('name')
-def disable(name):
-    """Disable a service from starting automatically"""
-    config = load_config()
-    
-    if name not in config["services"]:
-        click.echo(f"Error: Service '{name}' not found")
-        return
-    
-    subprocess.run(["systemctl", "--user", "disable", f"control-panel@{name}.service"])
-    
-    # Update config
-    config["services"][name]["enabled"] = False
-    save_config(config)
-    
-    click.echo(f"Service '{name}' disabled from starting automatically")
-
-# Combined command that enables auto-start and starts the service (commonly used together)
-@cli.command()
-@click.argument('name')
-def auto(name):
-    """Enable a service to auto-start at system boot and start it now"""
-    # First enable auto-start
-    config = load_config()
-    
-    if name not in config["services"]:
-        click.echo(f"Error: Service '{name}' not found")
-        return
-    
-    subprocess.run(["systemctl", "--user", "enable", f"control-panel@{name}.service"])
-    
-    # Update config
-    config["services"][name]["enabled"] = True
-    save_config(config)
-    
-    click.echo(f"Service '{name}' enabled to start automatically")
-    
-    # Now start the service
-    success, error = control_service(name, "start")
-    if not success:
-        click.echo(f"Error starting service: {error}")
-        click.echo(f"Check logs with: panel logs {name}")
-    else:
-        click.echo(f"Service '{name}' started successfully")
+# Register service lifecycle commands
+cli.add_command(start)
+cli.add_command(stop)
+cli.add_command(restart)
+cli.add_command(enable)
+cli.add_command(disable)
+cli.add_command(auto)
 
 @cli.command()
 @click.argument('name')

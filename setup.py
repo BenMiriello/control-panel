@@ -1,10 +1,13 @@
 import os
 import shutil
-from setuptools import setup, find_packages, Command
+
+from setuptools import Command, find_packages, setup
+
 
 class CopyFiles(Command):
     """Custom command to copy templates and static files into the package directory"""
-    description = 'Copy templates and static files into the package directory'
+
+    description = "Copy templates and static files into the package directory"
     user_options = []
 
     def initialize_options(self):
@@ -15,18 +18,19 @@ class CopyFiles(Command):
 
     def run(self):
         # Copy templates
-        if os.path.exists('templates'):
-            if not os.path.exists('control_panel/templates'):
-                os.makedirs('control_panel/templates', exist_ok=True)
-            shutil.copytree('templates', 'control_panel/templates', dirs_exist_ok=True)
+        if os.path.exists("templates"):
+            if not os.path.exists("control_panel/templates"):
+                os.makedirs("control_panel/templates", exist_ok=True)
+            shutil.copytree("templates", "control_panel/templates", dirs_exist_ok=True)
             print("Templates copied to control_panel/templates")
-        
+
         # Copy static files
-        if os.path.exists('static'):
-            if not os.path.exists('control_panel/static'):
-                os.makedirs('control_panel/static', exist_ok=True)
-            shutil.copytree('static', 'control_panel/static', dirs_exist_ok=True)
+        if os.path.exists("static"):
+            if not os.path.exists("control_panel/static"):
+                os.makedirs("control_panel/static", exist_ok=True)
+            shutil.copytree("static", "control_panel/static", dirs_exist_ok=True)
             print("Static files copied to control_panel/static")
+
 
 setup(
     name="control-panel",
@@ -39,7 +43,7 @@ setup(
         "tabulate>=0.8.9",
         "flask>=2.0.0,<2.2.0",  # Flask 2.2+ has issues with werkzeug compatibility
         "werkzeug>=2.0.0,<2.1.0",  # Pin werkzeug to a compatible version
-        "psutil>=5.9.0",          # For system metrics functionality
+        "psutil>=5.9.0",  # For system metrics functionality
     ],
     entry_points={
         "console_scripts": [
@@ -63,6 +67,6 @@ setup(
         "Topic :: System :: Systems Administration",
     ],
     cmdclass={
-        'copy_files': CopyFiles,
+        "copy_files": CopyFiles,
     },
 )

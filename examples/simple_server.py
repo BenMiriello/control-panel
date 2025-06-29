@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # Get port from environment variable or use default
-PORT = int(os.environ.get('PORT', 8000))
+PORT = int(os.environ.get("PORT", 8000))
+
 
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Content-type', 'text/html')
+        self.send_header("Content-type", "text/html")
         self.end_headers()
-        
+
         # Send response
         content = f"""
         <!DOCTYPE html>
@@ -40,18 +41,20 @@ class SimpleHandler(BaseHTTPRequestHandler):
         </body>
         </html>
         """
-        
+
         self.wfile.write(content.encode())
 
+
 def run_server():
-    server_address = ('', PORT)
+    server_address = ("", PORT)
     httpd = HTTPServer(server_address, SimpleHandler)
     print(f"Starting test server on port {PORT}...")
-    
+
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("Server stopped.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     run_server()

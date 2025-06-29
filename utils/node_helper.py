@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
 
 import os
-import subprocess
 import signal
+import subprocess
 import time
-import psutil
+
 
 def find_process_by_port(port):
     """Find a process using a specific port"""
     try:
         output = subprocess.check_output(
-            ["lsof", "-i", f":{port}", "-t"], 
-            stderr=subprocess.PIPE, 
-            text=True
+            ["lsof", "-i", f":{port}", "-t"], stderr=subprocess.PIPE, text=True
         ).strip()
-        
+
         if output:
             return [int(pid) for pid in output.split("\n")]
         return []
     except subprocess.CalledProcessError:
         return []
 
+
 def kill_process_by_port(port, force=False):
     """Kill processes using a specific port"""
     pids = find_process_by_port(port)
-    
+
     if not pids:
         return False, "No process found using this port"
-    
+
     killed = []
     for pid in pids:
         try:
@@ -38,7 +37,7 @@ def kill_process_by_port(port, force=False):
             killed.append(pid)
         except ProcessLookupError:
             pass
-        
+
     # Check if processes are actually killed
     if not force:
         time.sleep(0.5)  # Give processes time to terminate
@@ -50,8 +49,9 @@ def kill_process_by_port(port, force=False):
                     os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-    
+
     return True, f"Killed process(es): {', '.join(map(str, killed))}"
+
 
 def get_node_service_command(script_path, working_dir=None):
     """Generate proper command for running a Node.js service"""
@@ -59,8 +59,8 @@ def get_node_service_command(script_path, working_dir=None):
     if working_dir:
         if not os.path.isabs(script_path):
             script_path = os.path.join(working_dir, script_path)
-    
+
     # Add signal handling wrapper to ensure proper termination
     cmd = f"exec node {script_path}"
-    
+
     return cmd

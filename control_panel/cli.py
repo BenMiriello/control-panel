@@ -62,9 +62,11 @@ def cli():
 try:
     from control_panel.cli.service_commands import start, stop, restart, enable, disable, auto
     from control_panel.cli.management_commands import register, unregister, list, logs, edit
+    from control_panel.cli.config_commands import add_range, backup, restore, import_config
 except ImportError:
     from cli.service_commands import start, stop, restart, enable, disable, auto
     from cli.management_commands import register, unregister, list, logs, edit
+    from cli.config_commands import add_range, backup, restore, import_config
 
 # Register service lifecycle commands
 cli.add_command(start)
@@ -81,23 +83,15 @@ cli.add_command(list)
 cli.add_command(logs)
 cli.add_command(edit)
 
+# Register configuration commands
+cli.add_command(add_range)
+cli.add_command(backup)
+cli.add_command(restore)
+cli.add_command(import_config)
+
 # logs and unregister commands moved to cli/management_commands.py
 
-@cli.command()
-@click.argument('range_name')
-@click.argument('start', type=int)
-@click.argument('end', type=int)
-def add_range(range_name, start, end):
-    """Add a new port range"""
-    if end <= start:
-        click.echo("Error: End port must be greater than start port")
-        return
-    
-    config = load_config()
-    config["port_ranges"][range_name] = {"start": start, "end": end}
-    save_config(config)
-    
-    click.echo(f"Port range '{range_name}' added: {start}-{end}")
+# Configuration commands moved to cli/config_commands.py
 
 @cli.command()
 @click.argument('port', type=int)
@@ -108,38 +102,6 @@ def kill_port(port):
         click.echo(f"Success: {message}")
     else:
         click.echo(f"No processes found using port {port}")
-
-@cli.command()
-@click.argument('backup_file')
-def restore(backup_file):
-    """Restore configuration from a backup file"""
-    try:
-        with open(backup_file, 'r') as f:
-            backup_data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        click.echo(f"Error reading backup file: {e}")
-        return
-    
-    # Validate backup structure
-    if not isinstance(backup_data, dict) or "services" not in backup_data:
-        click.echo("Invalid backup file format")
-        return
-    
-    # Create backup of current config
-    config = load_config()
-    timestamp = subprocess.check_output(["date", "+%Y%m%d-%H%M%S"]).decode().strip()
-    backup_dir = Path("backups")
-    backup_dir.mkdir(exist_ok=True)
-    backup_path = backup_dir / f"control-panel-backup-{timestamp}.json"
-    
-    with open(backup_path, 'w') as f:
-        json.dump(config, f, indent=2)
-    
-    click.echo(f"Current configuration backed up to {backup_path}")
-    
-    # Restore from backup
-    save_config(backup_data)
-    click.echo(f"Configuration restored from {backup_file}")
 
 @cli.command()
 @click.option('--host', default='0.0.0.0', help='Host to bind to')

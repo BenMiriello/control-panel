@@ -16,17 +16,11 @@ except ImportError:
     from utils.service import register_service, unregister_service, get_service_status, detect_service_port
     from utils.node_helper import kill_process_by_port, get_node_service_command
 
-# Completion classes for service names
-class CompleteServices(click.ParamType):
-    name = "service"
-    
-    def shell_complete(self, ctx, param, incomplete):
-        """Return completion suggestions for services that match the incomplete string."""
-        config = load_config()
-        service_names = list(config["services"].keys())
-        return [click.CompletionItem(name) for name in service_names if name.startswith(incomplete)]
-
-SERVICE_NAME = CompleteServices()
+# Import completion utilities
+try:
+    from control_panel.cli.completion import SERVICE_NAME
+except ImportError:
+    from cli.completion import SERVICE_NAME
 
 @click.command()
 @click.option('--name', required=True, help='Service name')

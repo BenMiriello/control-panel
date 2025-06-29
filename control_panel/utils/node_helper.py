@@ -4,7 +4,6 @@ import os
 import subprocess
 import signal
 import time
-import psutil
 
 def find_process_by_port(port):
     """Find a process using a specific port"""

@@ -4,9 +4,8 @@ import os
 import click
 import subprocess
 import sys
-import shutil
-import tempfile
 import json
+import webbrowser
 from pathlib import Path
 from tabulate import tabulate
 

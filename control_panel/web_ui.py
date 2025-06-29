@@ -7,8 +7,6 @@ import click
 import subprocess
 import webbrowser
 import threading
-import importlib.resources
-import pkg_resources
 import shutil
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for
@@ -126,7 +124,7 @@ def get_metrics():
     """API endpoint to get current system metrics"""
     return jsonify(get_all_metrics())
 
-@app.route('/services/control/<n>/<action>')
+@app.route('/services/control/<name>/<action>')
 def service_control(name, action):
     if action in ['start', 'stop', 'restart']:
         success, error = control_service(name, action)
@@ -183,7 +181,7 @@ def add_service():
     port_ranges = config.get("port_ranges", {})
     return render_template('add_service.html', port_ranges=port_ranges)
 
-@app.route('/services/delete/<n>')
+@app.route('/services/delete/<name>')
 def delete_service(name):
     success, error = unregister_service(name)
     if not success:
@@ -216,7 +214,7 @@ def add_range():
     # GET request - show form
     return render_template('add_range.html')
 
-@app.route('/logs/<n>')
+@app.route('/logs/<name>')
 def view_logs(name):
     config = load_config()
     

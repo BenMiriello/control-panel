@@ -11,32 +11,32 @@
         <input type="text" class="form-control" id="command" name="command" value="{{ service.command }}" required>
         <div class="form-text">The command to start the service (e.g., /path/to/script.sh or python /path/to/app.py)</div>
     </div>
-    
+
     <div class="mb-3">
         <label for="port" class="form-label">Port</label>
         <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port }}">
         <div class="form-text">Leave empty to auto-detect port from the running service</div>
     </div>
-    
+
     <div class="mb-3">
         <label for="path" class="form-label">Path</label>
         <input type="text" class="form-control" id="path" name="path" value="{{ service.working_dir }}">
         <div class="form-text">Working directory path where the service should run</div>
     </div>
-    
+
     <div class="mb-3">
         <label for="env_vars" class="form-label">Environment Variables</label>
         <textarea class="form-control" id="env_vars" name="env_vars" rows="3">{% for key, value in service.env.items() %}{% if key != 'PORT' %}{{ key }}={{ value }}
 {% endif %}{% endfor %}</textarea>
         <div class="form-text">One variable per line in KEY=VALUE format (e.g., DEBUG=1)</div>
     </div>
-    
+
     <div class="mb-3 form-check">
         <input type="checkbox" class="form-check-input" id="detect_port" name="detect_port">
         <label class="form-check-label" for="detect_port">Detect actual port from running service</label>
         <div class="form-text">Use this if the service sets its own port different from what's configured</div>
     </div>
-    
+
     <button type="submit" class="btn btn-primary">Update Service</button>
     <a href="/" class="btn btn-secondary">Cancel</a>
 </form>

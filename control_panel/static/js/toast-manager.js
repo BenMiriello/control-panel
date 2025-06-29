@@ -17,22 +17,22 @@ class ToastManager {
     show(message, type = 'success', duration = 5000) {
         const toastId = `toast-${++this.toastCounter}`;
         const toastElement = this.createToastElement(toastId, message, type);
-        
+
         this.container.appendChild(toastElement);
-        
+
         // Initialize Bootstrap toast
         const toast = new bootstrap.Toast(toastElement, {
             delay: duration
         });
-        
+
         // Show the toast
         toast.show();
-        
+
         // Remove from DOM after it's hidden
         toastElement.addEventListener('hidden.bs.toast', () => {
             toastElement.remove();
         });
-        
+
         return toast;
     }
 
@@ -45,39 +45,39 @@ class ToastManager {
      */
     showServiceAction(service, action, status, errorMessage = null) {
         const messages = {
-            start: { 
-                success: `Started ${service} successfully`, 
-                error: `Failed to start ${service}` 
+            start: {
+                success: `Started ${service} successfully`,
+                error: `Failed to start ${service}`
             },
-            stop: { 
-                success: `Stopped ${service} successfully`, 
-                error: `Failed to stop ${service}` 
+            stop: {
+                success: `Stopped ${service} successfully`,
+                error: `Failed to stop ${service}`
             },
-            restart: { 
-                success: `Restarted ${service} successfully`, 
-                error: `Failed to restart ${service}` 
+            restart: {
+                success: `Restarted ${service} successfully`,
+                error: `Failed to restart ${service}`
             },
-            enable: { 
-                success: `Auto-start enabled for ${service}`, 
-                error: `Failed to enable auto-start for ${service}` 
+            enable: {
+                success: `Auto-start enabled for ${service}`,
+                error: `Failed to enable auto-start for ${service}`
             },
-            disable: { 
-                success: `Auto-start disabled for ${service}`, 
-                error: `Failed to disable auto-start for ${service}` 
+            disable: {
+                success: `Auto-start disabled for ${service}`,
+                error: `Failed to disable auto-start for ${service}`
             },
-            delete: { 
-                success: `Deleted ${service} successfully`, 
-                error: `Failed to delete ${service}` 
+            delete: {
+                success: `Deleted ${service} successfully`,
+                error: `Failed to delete ${service}`
             }
         };
-        
+
         let message = messages[action]?.[status] || `${action} ${service}: ${status}`;
-        
+
         // Add error details if provided
         if (status === 'error' && errorMessage) {
             message += `: ${errorMessage}`;
         }
-        
+
         this.show(message, status);
     }
 
@@ -95,10 +95,10 @@ class ToastManager {
         toast.setAttribute('role', 'alert');
         toast.setAttribute('aria-live', 'assertive');
         toast.setAttribute('aria-atomic', 'true');
-        
+
         const icon = this.getIcon(type);
         const bgClass = this.getBackgroundClass(type);
-        
+
         toast.innerHTML = `
             <div class="toast-header ${bgClass} text-white">
                 <span class="me-2">${icon}</span>
@@ -109,7 +109,7 @@ class ToastManager {
                 ${message}
             </div>
         `;
-        
+
         return toast;
     }
 
@@ -154,10 +154,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const service = urlParams.get('service');
     const status = urlParams.get('status');
     const message = urlParams.get('message');
-    
+
     if (action && service && status) {
         window.toastManager.showServiceAction(service, action, status, message);
-        
+
         // Clean up URL parameters
         const newUrl = window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);

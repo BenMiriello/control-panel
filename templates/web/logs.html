@@ -25,12 +25,12 @@
 <script>
     let autoRefresh = false;
     let refreshInterval;
-    
+
     document.getElementById('auto-refresh').addEventListener('click', function() {
         autoRefresh = !autoRefresh;
         this.classList.toggle('btn-outline-secondary');
         this.classList.toggle('btn-success');
-        
+
         if (autoRefresh) {
             this.textContent = 'Auto Refresh: ON';
             refreshInterval = setInterval(refreshLogs, 3000);
@@ -39,7 +39,7 @@
             clearInterval(refreshInterval);
         }
     });
-    
+
     function refreshLogs() {
         fetch(window.location.href)
             .then(response => response.text())

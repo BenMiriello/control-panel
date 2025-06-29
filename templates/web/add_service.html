@@ -11,25 +11,25 @@
         <input type="text" class="form-control" id="name" name="name" required>
         <div class="form-text">A unique identifier for the service (e.g., comfyui, nginx)</div>
     </div>
-    
+
     <div class="mb-3">
         <label for="command" class="form-label">Command</label>
         <input type="text" class="form-control" id="command" name="command" required>
         <div class="form-text">The command to start the service (e.g., /path/to/script.sh or python /path/to/app.py)</div>
     </div>
-    
+
     <div class="mb-3">
         <label for="port" class="form-label">Port (Optional)</label>
         <input type="number" class="form-control" id="port" name="port" min="1" max="65535">
         <div class="form-text">Leave empty for auto-assignment based on selected port range</div>
     </div>
-    
+
     <div class="mb-3">
         <label for="directory" class="form-label">Working Directory (Optional)</label>
         <input type="text" class="form-control" id="directory" name="directory">
         <div class="form-text">Leave empty to use your home directory</div>
     </div>
-    
+
     <div class="mb-3">
         <label for="range" class="form-label">Port Range (for auto-assignment)</label>
         <select class="form-select" id="range" name="range">
@@ -38,13 +38,13 @@
             {% endfor %}
         </select>
     </div>
-    
+
     <div class="mb-3">
         <label for="env_vars" class="form-label">Environment Variables (Optional)</label>
         <textarea class="form-control" id="env_vars" name="env_vars" rows="3"></textarea>
         <div class="form-text">One variable per line in KEY=VALUE format (e.g., DEBUG=1)</div>
     </div>
-    
+
     <button type="submit" class="btn btn-primary">Register Service</button>
     <a href="/" class="btn btn-secondary">Cancel</a>
 </form>

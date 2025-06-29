@@ -130,7 +130,7 @@ If you're having trouble accessing the web UI from other devices:
    ```bash
    # Find your IP
    ip addr show
-   
+
    # Then access via http://YOUR_IP:9000
    ```
 
@@ -144,7 +144,7 @@ panel register --name service-name --command "COMMAND" --port PORT [--path DIREC
 
 #### New Options
 
-- `--auto`: Enable the service to auto-start at system boot 
+- `--auto`: Enable the service to auto-start at system boot
 - `--start`: Start the service immediately after registration
 - `--path`: Working directory for the service (replaces the old `--dir` option, but both still work)
 

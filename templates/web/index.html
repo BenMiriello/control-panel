@@ -26,7 +26,7 @@
                     {% else %}
                     <span class="badge bg-danger">Stopped</span>
                     {% endif %}
-                    
+
                     {% if service.enabled %}
                     <span class="badge bg-info">Auto-start</span>
                     {% endif %}
@@ -35,7 +35,7 @@
             <div class="card-body">
                 <p><strong>Port:</strong> {{ service.port }}</p>
                 <p><strong>Command:</strong> <code>{{ service.command }}</code></p>
-                
+
                 <div class="btn-group">
                     {% if service.status == 'active' %}
                     <a href="/services/control/{{ service.name }}/stop" class="btn btn-sm btn-warning btn-actions">Stop</a>
@@ -43,13 +43,13 @@
                     {% else %}
                     <a href="/services/control/{{ service.name }}/start" class="btn btn-sm btn-success btn-actions">Start</a>
                     {% endif %}
-                    
+
                     {% if service.enabled %}
                     <a href="/services/control/{{ service.name }}/disable" class="btn btn-sm btn-outline-secondary btn-actions">Disable Auto-start</a>
                     {% else %}
                     <a href="/services/control/{{ service.name }}/enable" class="btn btn-sm btn-outline-info btn-actions">Enable Auto-start</a>
                     {% endif %}
-                    
+
                     <a href="/logs/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Logs</a>
                     <a href="/services/delete/{{ service.name }}" class="btn btn-sm btn-danger btn-actions" onclick="return confirm('Are you sure you want to delete this service?')">Delete</a>
                 </div>

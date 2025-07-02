@@ -6,13 +6,23 @@ A simple service manager for Linux to make it easy to run and manage multiple ap
 
 Instead of juggling multiple terminal windows or remembering different startup commands, register all your services once and then start/stop them with simple commands. Panel centralizes port allocation, allows auto-start and other helpful abstractions. Manage everything through the cli tool and built-in web UI.
 
-## Quick start
+## Installation
 
+### Direct install
+```bash
+pip install git+https://github.com/BenMiriello/control-panel.git
+```
+
+### Development install
 ```bash
 git clone https://github.com/BenMiriello/control-panel.git
 cd control-panel
 ./install.sh
+```
 
+## Quick start
+
+```bash
 # Register a service
 panel add my-app --command "/path/to/your/app" --port 8080
 
@@ -51,13 +61,36 @@ panel add my-service --command "/usr/local/bin/myservice --port 8080" --auto
 ## All commands
 
 ```bash
-panel add <name> --command "..." [--port N] [--dir /path] [--auto]
+panel register <name> --command "..." [--port N] [--path /dir] [--auto]
 panel start/stop/restart <name>
 panel list                    # See all services and their status
 panel logs <name>             # View service logs
-panel remove <name>           # Unregister a service
+panel unregister <name>       # Remove a service
 panel web                     # Start web interface
+panel completion --install   # Set up tab completion
 ```
+
+### Tab Completion
+
+Enable tab completion for service names and commands:
+
+```bash
+# Auto-detect your shell and install
+panel completion --install
+
+# Or specify your shell
+panel completion --install --shell zsh
+panel completion --install --shell bash
+panel completion --install --shell fish
+
+# Test if completion is working
+panel completion --test
+
+# Remove completion
+panel completion --uninstall
+```
+
+After installation, restart your shell or run `source ~/.zshrc` (or `~/.bashrc` for bash).
 
 ## Web interface
 

@@ -48,7 +48,6 @@ setup(
     entry_points={
         "console_scripts": [
             "panel=control_panel.cli:main",
-            "panel-web=control_panel.web_ui:main",  # Add web UI as separate entry point
         ],
     },
     python_requires=">=3.6",

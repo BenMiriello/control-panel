@@ -7,6 +7,12 @@
 
 <form method="POST" action="/services/edit/{{ service.name }}">
     <div class="mb-3">
+        <label for="name" class="form-label">Service Name</label>
+        <input type="text" class="form-control" id="name" name="name" value="{{ service.name }}" required pattern="[a-zA-Z0-9_-]+" maxlength="50">
+        <div class="form-text">Service name (letters, numbers, hyphens, underscores only). Changing this will rename the service.</div>
+    </div>
+
+    <div class="mb-3">
         <label for="command" class="form-label">Command</label>
         <input type="text" class="form-control" id="command" name="command" value="{{ service.command }}" required>
         <div class="form-text">The command to start the service (e.g., /path/to/script.sh or python /path/to/app.py)</div>
@@ -14,9 +20,41 @@
 
     <div class="mb-3">
         <label for="port" class="form-label">Port</label>
-        <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port }}">
-        <div class="form-text">Leave empty to auto-detect port from the running service</div>
+        {% if service.port_status.validation == 'dynamic_port' %}
+            <div class="alert alert-info">
+                <strong>Dynamic Port:</strong> This service uses port {{ service.port_status.actual_port }} (auto-detected).
+                <br>To set a manual port, check "Set manual port" below.
+            </div>
+            <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port_status.actual_port }}" disabled>
+        {% elif service.port_status.validation == 'port_mismatch' %}
+            <div class="alert alert-warning">
+                <strong>Port Mismatch:</strong> Service is running on port {{ service.port_status.actual_port }} but configured for {{ service.port }}.
+                <br>Check "Set manual port" to override or "Detect port" to use the detected port.
+            </div>
+            <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port }}">
+        {% else %}
+            <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port }}">
+        {% endif %}
+        {% if service.port_mode == 'auto_detect' %}
+            <span id="auto-detect-label" class="text-muted"> (auto-detected)</span>
+        {% else %}
+            <div class="form-text" id="manual-port-help">Leave empty to auto-detect port from the running service</div>
+        {% endif %}
     </div>
+
+    <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="detect_port" name="detect_port" {% if service.port_mode == 'auto_detect' %}checked{% endif %}>
+        <label class="form-check-label" for="detect_port">Detect actual port from running service</label>
+        <div class="form-text">Use this if the service sets its own port different from what's configured</div>
+    </div>
+
+    {% if service.port_status.validation in ['dynamic_port', 'port_mismatch'] %}
+    <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="set_manual_port" name="set_manual_port">
+        <label class="form-check-label" for="set_manual_port">Set manual port and disable auto-detection</label>
+        <div class="form-text">This will configure a static port for the service</div>
+    </div>
+    {% endif %}
 
     <div class="mb-3">
         <label for="path" class="form-label">Path</label>
@@ -31,13 +69,101 @@
         <div class="form-text">One variable per line in KEY=VALUE format (e.g., DEBUG=1)</div>
     </div>
 
-    <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" id="detect_port" name="detect_port">
-        <label class="form-check-label" for="detect_port">Detect actual port from running service</label>
-        <div class="form-text">Use this if the service sets its own port different from what's configured</div>
-    </div>
-
     <button type="submit" class="btn btn-primary">Update Service</button>
     <a href="/" class="btn btn-secondary">Cancel</a>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const setManualPortCheckbox = document.getElementById('set_manual_port');
+    const portInput = document.getElementById('port');
+    const detectPortCheckbox = document.getElementById('detect_port');
+
+    // Store original value
+    let originalPortValue = portInput ? portInput.value : '';
+    let portContainer = portInput ? portInput.parentElement : null;
+
+    // Handle manual port setting
+    if (setManualPortCheckbox && portInput) {
+        setManualPortCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                portInput.disabled = false;
+                portInput.focus();
+            } else {
+                portInput.disabled = true;
+            }
+        });
+    }
+
+    // Handle port detection
+    if (detectPortCheckbox && portInput && portContainer) {
+        const manualPortHelp = document.getElementById('manual-port-help');
+        const autoDetectLabel = document.getElementById('auto-detect-label');
+
+        // Initialize if checkbox is already checked on page load
+        if (detectPortCheckbox.checked) {
+            originalPortValue = portInput.value;
+            showDetectedPort(portInput.value, true); // true = already detected
+        }
+
+        detectPortCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                // Store current value if not already stored
+                if (!detectPortCheckbox.dataset.initialized) {
+                    originalPortValue = portInput.value;
+                }
+
+                // Hide manual help text
+                if (manualPortHelp) manualPortHelp.style.display = 'none';
+
+                // Show detecting state
+                showDetectedPort('Detecting...', false);
+
+                // Make AJAX call to detect port
+                const serviceName = '{{ service.name }}';
+                fetch(`/api/services/${serviceName}/detect-port`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.port) {
+                            showDetectedPort(data.port + ' (auto-detected)', true);
+                            portInput.value = data.port;
+                        } else {
+                            showDetectedPort('⚠️ Port detection failed', false, 'text-warning');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Port detection error:', error);
+                        showDetectedPort('⚠️ Port detection failed', false, 'text-warning');
+                    });
+            } else {
+                // Restore original input
+                restoreManualInput();
+            }
+        });
+
+        function showDetectedPort(text, isSuccess, extraClass = '') {
+            portInput.style.display = 'none';
+            const detectingElement = document.getElementById('detecting-port') || createDetectingElement();
+            detectingElement.textContent = text;
+            detectingElement.className = `form-control-plaintext ${isSuccess ? 'text-muted' : 'text-muted'} ${extraClass}`;
+        }
+
+        function createDetectingElement() {
+            const detectingSpan = document.createElement('span');
+            detectingSpan.id = 'detecting-port';
+            portContainer.insertBefore(detectingSpan, portInput.nextSibling);
+            return detectingSpan;
+        }
+
+        function restoreManualInput() {
+            const detectingElement = document.getElementById('detecting-port');
+            if (detectingElement) detectingElement.remove();
+            if (autoDetectLabel) autoDetectLabel.style.display = 'none';
+            if (manualPortHelp) manualPortHelp.style.display = '';
+            portInput.style.display = '';
+            portInput.value = originalPortValue;
+        }
+    }
+});
+</script>
 {% endblock %}

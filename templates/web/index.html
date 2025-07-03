@@ -3,6 +3,8 @@
 {% block title %}Control Panel - Dashboard{% endblock %}
 
 {% block content %}
+{% include 'metrics_widget.html' %}
+
 <div class="row mb-4">
     <div class="col">
         <h3>Registered Services</h3>
@@ -33,7 +35,19 @@
                 </div>
             </div>
             <div class="card-body">
-                <p><strong>Port:</strong> {{ service.port }}</p>
+                <p><strong>Port:</strong>
+                    {% if service.port_status.validation == 'port_matches' %}
+                        <span class="text-success">{{ service.port }}</span> ✓
+                    {% elif service.port_status.validation == 'port_mismatch' %}
+                        <span class="text-warning" title="Service running on port {{ service.port_status.actual_port }} but configured for {{ service.port_status.configured_port }}">{{ service.port }}</span> <span class="text-danger">*</span>
+                    {% elif service.port_status.validation == 'dynamic_port' %}
+                        <span class="text-info" title="Service using dynamic port {{ service.port_status.actual_port }}">{{ service.port_status.actual_port }}</span> <span class="text-muted">~</span>
+                    {% elif service.port_status.validation == 'no_port_detected' %}
+                        <span class="text-muted" title="No port detected">{{ service.port or 'None' }}</span> ?
+                    {% else %}
+                        {{ service.port or 'None' }}
+                    {% endif %}
+                </p>
                 <p><strong>Command:</strong> <code>{{ service.command }}</code></p>
 
                 <div class="btn-group">
@@ -86,4 +100,5 @@
         </tbody>
     </table>
 </div>
+
 {% endblock %}

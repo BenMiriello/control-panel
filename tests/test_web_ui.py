@@ -14,11 +14,11 @@ original_argv = sys.argv
 sys.argv = ["test"]
 
 try:
-    from control_panel.utils.config import load_config
+    from control_panel.utils.config import load_config, save_config
 except ImportError:
     # Fallback for local development
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from control_panel.utils.config import load_config
+    from control_panel.utils.config import load_config, save_config
 finally:
     sys.argv = original_argv
 
@@ -285,6 +285,100 @@ class TestEditService:
         assert env_vars["VALID"] == "test"
         assert "INVALID_LINE" not in env_vars
         assert "ANOTHER_INVALID" not in env_vars
+
+    def test_edit_service_name_change_success(self, client, temp_config):
+        """Test successful service name change"""
+        response = client.post(
+            "/services/edit/test-service",
+            data={
+                "name": "renamed-service",
+                "command": "python app.py",
+                "port": "8080",
+                "path": "/secure/temp/path",
+                "env_vars": "DEBUG=1",
+            },
+        )
+
+        assert response.status_code == 302
+
+        # Verify service was renamed in config
+        config = load_config()
+        assert "test-service" not in config["services"]
+        assert "renamed-service" in config["services"]
+        assert config["services"]["renamed-service"]["command"] == "python app.py"
+
+    def test_edit_service_name_change_invalid_name(self, client, temp_config):
+        """Test service name change with invalid characters"""
+        response = client.post(
+            "/services/edit/test-service",
+            data={
+                "name": "invalid@name!",
+                "command": "python app.py",
+                "port": "8080",
+                "path": "/secure/temp/path",
+                "env_vars": "DEBUG=1",
+            },
+        )
+
+        assert response.status_code == 302
+        assert "status=error" in response.location
+
+        # Verify service was not renamed
+        config = load_config()
+        assert "test-service" in config["services"]
+        assert "invalid@name!" not in config["services"]
+
+    def test_edit_service_name_change_duplicate_name(self, client, temp_config):
+        """Test service name change to existing service name"""
+        # Add another service to config
+        config = load_config()
+        config["services"]["existing-service"] = {
+            "command": "python other.py",
+            "port": 9090,
+            "working_dir": "/secure/temp/path",
+            "enabled": False,
+            "env": {"PORT": "9090"},
+        }
+        save_config(config)
+
+        response = client.post(
+            "/services/edit/test-service",
+            data={
+                "name": "existing-service",
+                "command": "python app.py",
+                "port": "8080",
+                "path": "/secure/temp/path",
+                "env_vars": "DEBUG=1",
+            },
+        )
+
+        assert response.status_code == 302
+        assert "status=error" in response.location
+
+        # Verify service was not renamed
+        config = load_config()
+        assert "test-service" in config["services"]
+        assert len(config["services"]) == 2  # Both services still exist
+
+    def test_edit_service_name_no_change(self, client, temp_config):
+        """Test editing service with same name (no rename needed)"""
+        response = client.post(
+            "/services/edit/test-service",
+            data={
+                "name": "test-service",  # Same name
+                "command": "python new_app.py",
+                "port": "8080",
+                "path": "/secure/temp/path",
+                "env_vars": "DEBUG=1",
+            },
+        )
+
+        assert response.status_code == 302
+
+        # Verify service still exists with updated command
+        config = load_config()
+        assert "test-service" in config["services"]
+        assert config["services"]["test-service"]["command"] == "python new_app.py"
 
 
 if __name__ == "__main__":

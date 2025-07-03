@@ -348,6 +348,20 @@ def edit(name, command, port, path, env_add, env_remove, detect_port):
 
 
 # Add commands from control.py
+
+
+def shorten_command(command, max_length=50):
+    """Shorten command display for list view"""
+    if len(command) <= max_length:
+        return command
+
+    # Cut in half and add ... in middle
+    half_length = (max_length - 3) // 2  # -3 for "..."
+    start = command[:half_length]
+    end = command[-half_length:]
+    return f"{start}...{end}"
+
+
 @cli.command()
 def list():
     """List all registered services"""
@@ -382,7 +396,7 @@ def list():
                 colored_port,
                 colored_status,
                 enabled_mark,
-                service["command"],
+                shorten_command(service["command"]),
             ]
         )
 

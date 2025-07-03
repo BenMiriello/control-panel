@@ -126,6 +126,15 @@ def index():
 
     for name, service in config["services"].items():
         status, enabled = get_service_status(name)
+
+        # Get port status information
+        try:
+            from control_panel.utils.service import get_service_port_status
+        except ImportError:
+            from utils.service import get_service_port_status
+
+        port_status = get_service_port_status(name)
+
         services.append(
             {
                 "name": name,
@@ -133,6 +142,7 @@ def index():
                 "command": service["command"],
                 "status": status,
                 "enabled": enabled,
+                "port_status": port_status,
             }
         )
 
@@ -149,6 +159,25 @@ def index():
 def get_metrics():
     """API endpoint to get current system metrics"""
     return jsonify(get_all_metrics())
+
+
+@app.route("/api/services/<name>/detect-port")
+def detect_service_port_api(name):
+    """API endpoint to detect port for a service"""
+    try:
+        from control_panel.utils.service import detect_service_port
+    except ImportError:
+        from utils.service import detect_service_port
+
+    config = load_config()
+    if name not in config["services"]:
+        return jsonify({"error": "Service not found"}), 404
+
+    detected_port = detect_service_port(name)
+    if detected_port:
+        return jsonify({"port": detected_port, "success": True})
+    else:
+        return jsonify({"error": "No port detected", "success": False}), 404
 
 
 @app.route("/services/control/<name>/<action>")
@@ -372,13 +401,38 @@ def edit_service(name):
 
     if request.method == "POST":
         # Get form data
+        new_name = request.form.get("name", "").strip()
         command = request.form.get("command", "").strip()
         port = request.form.get("port", "").strip()
         working_dir = request.form.get("path", "").strip()
         env_vars = request.form.get("env_vars", "").strip()
         detect_port = request.form.get("detect_port") == "on"
+        set_manual_port = request.form.get("set_manual_port") == "on"
 
         try:
+            # Handle service name change first if needed
+            if new_name and new_name != name:
+                try:
+                    from control_panel.utils.service import rename_service
+                except ImportError:
+                    from utils.service import rename_service
+
+                success, message = rename_service(name, new_name)
+                if not success:
+                    return redirect(
+                        url_for(
+                            "index",
+                            action="edit",
+                            service=name,
+                            status="error",
+                            message=message,
+                        )
+                    )
+                # Update name for subsequent operations
+                name = new_name
+                # Reload config after rename
+                config = load_config()
+                service = config["services"][name]
             # Update command if provided
             if command:
                 service["command"] = command
@@ -387,8 +441,28 @@ def edit_service(name):
             if working_dir:
                 service["working_dir"] = working_dir
 
+            # Handle port mode setting
+            if set_manual_port and port:
+                try:
+                    from control_panel.utils.service import set_port_mode
+                except ImportError:
+                    from utils.service import set_port_mode
+
+                port_num = int(port)
+                success, message = set_port_mode(name, "static", port_num)
+                if not success:
+                    return redirect(
+                        url_for(
+                            "index",
+                            action="edit",
+                            service=name,
+                            status="error",
+                            message=message,
+                        )
+                    )
+                service["port"] = port_num
             # Try to detect port if requested
-            if detect_port:
+            elif detect_port:
                 try:
                     from control_panel.utils.service import detect_service_port
                 except ImportError:
@@ -397,6 +471,9 @@ def edit_service(name):
                 detected_port = detect_service_port(name)
                 if detected_port:
                     service["port"] = detected_port
+                    service[
+                        "port_mode"
+                    ] = "auto_detect"  # Track that this was auto-detected
                     port = str(detected_port)
                 else:
                     return redirect(
@@ -415,6 +492,7 @@ def edit_service(name):
                     if not (1 <= port_num <= 65535):
                         raise ValueError("Port must be between 1-65535")
                     service["port"] = port_num
+                    service["port_mode"] = "static"  # Track that this was manually set
                 except ValueError as e:
                     return redirect(
                         url_for(
@@ -468,9 +546,19 @@ def edit_service(name):
             )
 
     # GET request - show edit form
-    # Add service name to the service dict for template compatibility
+    # Add service name and port status to the service dict for template compatibility
     service_with_name = service.copy()
     service_with_name["name"] = name
+
+    # Get port status information
+    try:
+        from control_panel.utils.service import get_service_port_status
+    except ImportError:
+        from utils.service import get_service_port_status
+
+    port_status = get_service_port_status(name)
+    service_with_name["port_status"] = port_status
+
     return render_template("edit_service.html", service=service_with_name)
 
 

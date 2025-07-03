@@ -221,3 +221,187 @@ def detect_service_port(name):
         return None
     except Exception:
         return None
+
+
+def get_service_port_status(name):
+    """Get comprehensive port status for a service"""
+    config = load_config()
+
+    if name not in config["services"]:
+        return {
+            "status": "service_not_found",
+            "configured_port": None,
+            "actual_port": None,
+            "validation": "error",
+            "port_type": "unknown",
+        }
+
+    service = config["services"][name]
+    configured_port = service.get("port")
+
+    # Check if service is running
+    status, _ = get_service_status(name)
+
+    if status != "active":
+        return {
+            "status": "service_stopped",
+            "configured_port": configured_port,
+            "actual_port": None,
+            "validation": "unknown",
+            "port_type": "configured" if configured_port else "none",
+        }
+
+    # Detect actual port
+    actual_port = detect_service_port(name)
+
+    # Determine port validation status and type
+    if actual_port is None:
+        validation = "no_port_detected"
+        port_type = "none"
+    elif configured_port is None:
+        validation = "dynamic_port"
+        port_type = "dynamic"
+    elif actual_port == configured_port:
+        validation = "port_matches"
+        port_type = "configured_static"
+    else:
+        validation = "port_mismatch"
+        port_type = "configured_mismatch"
+
+    return {
+        "status": "service_running",
+        "configured_port": configured_port,
+        "actual_port": actual_port,
+        "validation": validation,
+        "port_type": port_type,
+    }
+
+
+def validate_service_port(name):
+    """Validate that a service is using its configured port"""
+    port_status = get_service_port_status(name)
+
+    if port_status["validation"] == "port_matches":
+        return True, "Service is using configured port"
+    elif port_status["validation"] == "port_mismatch":
+        return (
+            False,
+            f"Service using port {port_status['actual_port']} but configured for {port_status['configured_port']}",
+        )
+    elif port_status["validation"] == "no_port_detected":
+        return False, "Service is running but no port detected"
+    elif port_status["validation"] == "dynamic_port":
+        return True, f"Service using dynamic port {port_status['actual_port']}"
+    else:
+        return False, f"Service validation failed: {port_status['status']}"
+
+
+def set_port_mode(name, mode, port=None):
+    """Set port mode for a service (static or dynamic)"""
+    config = load_config()
+
+    if name not in config["services"]:
+        return False, f"Service '{name}' not found"
+
+    service = config["services"][name]
+
+    if mode == "static":
+        if port is None:
+            return False, "Port must be specified for static mode"
+        service["port"] = port
+        service["env"]["PORT"] = str(port)
+        # Add metadata to track port mode
+        service["port_mode"] = "static"
+    elif mode == "dynamic":
+        # Keep current port if detected, but mark as dynamic
+        service["port_mode"] = "dynamic"
+        # Don't set PORT env var for dynamic services
+        if "PORT" in service["env"]:
+            del service["env"]["PORT"]
+    else:
+        return False, f"Unknown port mode: {mode}"
+
+    save_config(config)
+    return True, f"Port mode set to {mode}"
+
+
+def rename_service(old_name, new_name):
+    """Rename a service and update all related configurations"""
+    import re
+    import subprocess
+
+    from .config import load_config, save_config
+
+    # Validate new name
+    if not re.match(r"^[a-zA-Z0-9_-]+$", new_name):
+        return (
+            False,
+            "Service name can only contain letters, numbers, hyphens, and underscores",
+        )
+
+    if len(new_name) > 50:
+        return False, "Service name must be 50 characters or less"
+
+    if new_name == old_name:
+        return True, "No change needed"
+
+    # Load config
+    config = load_config()
+
+    if old_name not in config["services"]:
+        return False, f"Service '{old_name}' not found"
+
+    if new_name in config["services"]:
+        return False, f"Service '{new_name}' already exists"
+
+    try:
+        # Get current service status
+        status, enabled = get_service_status(old_name)
+
+        # Stop the old service if running
+        if status == "active":
+            success, error = control_service(old_name, "stop")
+            if not success:
+                return False, f"Failed to stop service: {error}"
+
+        # Disable the old service
+        if enabled:
+            subprocess.run(
+                ["systemctl", "--user", "disable", f"control-panel@{old_name}.service"],
+                check=False,
+            )
+
+        # Copy service configuration to new name
+        config["services"][new_name] = config["services"][old_name].copy()
+
+        # Remove old service from config
+        del config["services"][old_name]
+
+        # Save updated config
+        save_config(config)
+
+        # If the service was enabled, enable the new one
+        if enabled:
+            subprocess.run(
+                ["systemctl", "--user", "enable", f"control-panel@{new_name}.service"],
+                check=False,
+            )
+
+        # If the service was running, start the new one
+        if status == "active":
+            success, error = control_service(new_name, "start")
+            if not success:
+                # Rollback on failure
+                config["services"][old_name] = config["services"][new_name].copy()
+                del config["services"][new_name]
+                save_config(config)
+                return False, f"Failed to start renamed service: {error}"
+
+        return True, f"Service renamed from '{old_name}' to '{new_name}'"
+
+    except Exception as e:
+        # Rollback on any error
+        if new_name in config["services"]:
+            del config["services"][new_name]
+        save_config(config)
+        return False, f"Error renaming service: {str(e)}"

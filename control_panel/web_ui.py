@@ -353,6 +353,127 @@ def view_logs(name):
     return render_template("logs.html", name=name, logs=logs)
 
 
+@app.route("/services/edit/<name>", methods=["GET", "POST"])
+def edit_service(name):
+    config = load_config()
+
+    if name not in config["services"]:
+        return redirect(
+            url_for(
+                "index",
+                action="edit",
+                service=name,
+                status="error",
+                message=f"Service '{name}' not found",
+            )
+        )
+
+    service = config["services"][name]
+
+    if request.method == "POST":
+        # Get form data
+        command = request.form.get("command", "").strip()
+        port = request.form.get("port", "").strip()
+        working_dir = request.form.get("path", "").strip()
+        env_vars = request.form.get("env_vars", "").strip()
+        detect_port = request.form.get("detect_port") == "on"
+
+        try:
+            # Update command if provided
+            if command:
+                service["command"] = command
+
+            # Update working directory if provided
+            if working_dir:
+                service["working_dir"] = working_dir
+
+            # Try to detect port if requested
+            if detect_port:
+                try:
+                    from control_panel.utils.service import detect_service_port
+                except ImportError:
+                    from utils.service import detect_service_port
+
+                detected_port = detect_service_port(name)
+                if detected_port:
+                    service["port"] = detected_port
+                    port = str(detected_port)
+                else:
+                    return redirect(
+                        url_for(
+                            "index",
+                            action="edit",
+                            service=name,
+                            status="error",
+                            message="Service is not running or no port detected",
+                        )
+                    )
+            # Update port if provided
+            elif port:
+                try:
+                    port_num = int(port)
+                    if not (1 <= port_num <= 65535):
+                        raise ValueError("Port must be between 1-65535")
+                    service["port"] = port_num
+                except ValueError as e:
+                    return redirect(
+                        url_for(
+                            "index",
+                            action="edit",
+                            service=name,
+                            status="error",
+                            message=f"Invalid port: {e}",
+                        )
+                    )
+
+            # Initialize environment variables if not present
+            if "env" not in service:
+                service["env"] = {}
+
+            # Process environment variables
+            if env_vars:
+                # Clear existing env vars (except PORT)
+                current_port = service["env"].get("PORT")
+                service["env"] = {}
+                if current_port:
+                    service["env"]["PORT"] = current_port
+
+                # Add new env vars
+                for line in env_vars.split("\n"):
+                    line = line.strip()
+                    if line and "=" in line:
+                        key, value = line.split("=", 1)
+                        service["env"][key.strip()] = value.strip()
+
+            # Always update PORT in environment
+            if "port" in service:
+                service["env"]["PORT"] = str(service["port"])
+
+            # Save updated configuration
+            save_config(config)
+
+            return redirect(
+                url_for("index", action="edit", service=name, status="success")
+            )
+
+        except Exception as e:
+            return redirect(
+                url_for(
+                    "index",
+                    action="edit",
+                    service=name,
+                    status="error",
+                    message=f"Failed to update service: {str(e)}",
+                )
+            )
+
+    # GET request - show edit form
+    # Add service name to the service dict for template compatibility
+    service_with_name = service.copy()
+    service_with_name["name"] = name
+    return render_template("edit_service.html", service=service_with_name)
+
+
 def start_web_ui(host="0.0.0.0", port=9000, debug=False, open_browser=True):
     """Start the web UI"""
     if open_browser:

@@ -43,7 +43,6 @@ dev = [
 
 [project.scripts]
 panel = "control_panel.cli:main"
-panel-web = "control_panel.web_ui:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "control_panel.__version__"}

@@ -761,83 +761,74 @@ def restore(backup_file):
 @click.option("--host", default="0.0.0.0", help="Host to bind to")
 @click.option("--port", default=9000, type=int, help="Port to listen on")
 @click.option("--no-browser", is_flag=True, help="Do not open browser automatically")
-@click.option(
-    "--register", is_flag=True, help="Register as a service instead of running directly"
-)
-def web(host, port, no_browser, register):
-    """Start the web UI"""
-
-    # Check if the web UI is already registered as a service
+def web(host, port, no_browser):
+    """Start the web UI as a service"""
     config = load_config()
-    service_name = "control-panel-web"
+    service_name = "panel-web"
 
-    if register or service_name in config["services"]:
-        # Register the web UI as a service if needed
-        if service_name not in config["services"]:
-            # Determine the correct command to run the web UI
-            if PACKAGE_MODE:
-                web_ui_command = f"panel-web --host {host} --port {port}"
-            else:
-                web_ui_command = f"python3 web_ui.py --host {host} --port {port}"
-
-            # Register the service
-            env_vars = [f"HOST={host}", f"PORT={port}"]
-            success, result = register_service(
-                service_name, web_ui_command, port, "", "default", env_vars
+    # Register the web UI as a service if not already registered
+    if service_name not in config["services"]:
+        # Use direct python command instead of panel-web script
+        if PACKAGE_MODE:
+            web_ui_command = f"python3 -m control_panel.web_ui --host {host} --port {port} --no-browser"
+        else:
+            web_ui_command = (
+                f"python3 web_ui.py --host {host} --port {port} --no-browser"
             )
 
-            if not success:
-                click.echo(f"Error registering web UI service: {result}")
-                return
+        # Register the service
+        env_vars = [f"HOST={host}", f"PORT={port}"]
+        success, result = register_service(
+            service_name, web_ui_command, port, "", "default", env_vars
+        )
 
-            click.echo(
-                f"Web UI registered as service '{service_name}' on port {result}"
-            )
-
-            # Enable auto-start
-            config = load_config()
-            config["services"][service_name]["enabled"] = True
-            save_config(config)
-            subprocess.run(
-                [
-                    "systemctl",
-                    "--user",
-                    "enable",
-                    f"control-panel@{service_name}.service",
-                ]
-            )
-
-        # Start the service
-        success, error = control_service(service_name, "start")
         if not success:
-            click.echo(f"Error starting web UI service: {error}")
-            click.echo(f"Check logs with: panel logs {service_name}")
+            click.echo(f"Error registering web UI service: {result}")
             return
 
-        click.echo(f"Web UI service '{service_name}' started on http://{host}:{port}")
-        click.echo(f"View logs with: panel logs {service_name}")
+        click.echo(f"✓ Web UI registered as service '{service_name}' on port {result}")
 
-        # Open browser if requested
-        if not no_browser:
-            webbrowser.open(f"http://localhost:{port}")
+        # Enable auto-start
+        config = load_config()
+        config["services"][service_name]["enabled"] = True
+        save_config(config)
+        subprocess.run(
+            [
+                "systemctl",
+                "--user",
+                "enable",
+                f"control-panel@{service_name}.service",
+            ]
+        )
+
+    # Start the service if not already running
+    status, _ = get_service_status(service_name)
+    if status != "active":
+        success, error = control_service(service_name, "start")
+        if not success:
+            click.echo(f"✗ Error starting web UI service: {error}")
+            click.echo(f"Check logs with: panel logs {service_name}")
+            return
+        click.echo(f"✓ Web UI service started on http://{host}:{port}")
     else:
-        # Run the web UI directly (legacy mode)
-        click.echo("Starting Web UI directly (not as a service)")
-        click.echo("To register as a service, use --register flag")
+        click.echo(f"✓ Web UI service already running on http://{host}:{port}")
 
-        # Import here to avoid circular imports
-        try:
-            from control_panel.web_ui import start_web_ui
-        except ImportError:
-            # Fallback to local import if package is not fully installed
+    # Offer to open browser
+    if not no_browser:
+        import os
+
+        # Only open browser if we have a display (not SSH/headless)
+        if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
             try:
-                from web_ui import start_web_ui
-            except ImportError:
-                click.echo("Error: web_ui module not found!")
-                return
-
-        click.echo(f"Starting Control Panel web UI at http://{host}:{port}")
-        start_web_ui(host=host, port=port, debug=False, open_browser=not no_browser)
+                webbrowser.open(f"http://localhost:{port}")
+                click.echo("✓ Browser opened")
+            except Exception:
+                click.echo(f"✓ Web UI running at: http://localhost:{port}")
+                click.echo("  (Could not open browser automatically)")
+        else:
+            click.echo(f"✓ Web UI running at: http://localhost:{port}")
+    else:
+        click.echo(f"✓ Web UI running at: http://localhost:{port}")
 
 
 @cli.command()

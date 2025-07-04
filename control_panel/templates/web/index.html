@@ -17,7 +17,7 @@
 {% if services %}
 <div class="row">
     {% for service in services %}
-    <div class="col-md-6">
+    <div class="col-lg-6 col-12">
         <div class="card service-card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">{{ service.name }}</h5>
@@ -48,7 +48,26 @@
                         {{ service.port or 'None' }}
                     {% endif %}
                 </p>
-                <p><strong>Command:</strong> <code>{{ service.command }}</code></p>
+                <p class="d-flex align-items-start">
+                    {% if service.command|length > 50 %}
+                        <span class="command-toggle-container" style="display: inline-block; width: 12px; text-align: center; margin-right: 4px;">
+                            <span class="command-toggle" style="cursor: pointer; color: black; text-decoration: none; user-select: none;" title="Toggle command display">▶</span>
+                        </span>
+                    {% endif %}
+                    <span style="margin-right: 6px;"><strong>Command:</strong></span>
+                    <span class="command-display" style="flex: 1; min-width: 0;">
+                        {% if service.command|length > 50 %}
+                            <span class="command-short">
+                                <code style="display: inline-block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top;">{{ service.command }}</code>
+                            </span>
+                            <span class="command-full d-none">
+                                <code style="display: inline-block; width: 100%; word-break: break-all; white-space: pre-wrap; vertical-align: top;">{{ service.command }}</code>
+                            </span>
+                        {% else %}
+                            <code>{{ service.command }}</code>
+                        {% endif %}
+                    </span>
+                </p>
 
                 <div class="btn-group">
                     {% if service.status == 'active' %}
@@ -101,4 +120,37 @@
     </table>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle command toggle functionality
+    document.querySelectorAll('.command-toggle').forEach(function(toggle) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Navigate to the command display within the same paragraph
+            const paragraph = this.closest('p');
+            const commandDisplay = paragraph.querySelector('.command-display');
+            const shortSpan = commandDisplay.querySelector('.command-short');
+            const fullSpan = commandDisplay.querySelector('.command-full');
+
+            if (shortSpan.classList.contains('d-none')) {
+                // Currently showing full, switch to short
+                shortSpan.classList.remove('d-none');
+                fullSpan.classList.add('d-none');
+                this.textContent = '▶';
+                this.title = 'Expand command';
+            } else {
+                // Currently showing short, switch to full
+                shortSpan.classList.add('d-none');
+                fullSpan.classList.remove('d-none');
+                this.textContent = '▼';
+                this.title = 'Collapse command';
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

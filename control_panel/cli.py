@@ -385,11 +385,26 @@ def list():
         else:
             colored_status = status  # Default color for inactive status
 
-        # Port color: default when service off, cyan when active
+        # Port display with indicators
+        port_display = str(service["port"])
         if status == "active":
-            colored_port = click.style(str(service["port"]), fg="cyan")
+            # Get port validation status for running services
+            from control_panel.utils.service import get_service_port_status
+
+            port_status = get_service_port_status(name)
+
+            if port_status["validation"] == "port_mismatch":
+                port_display += "*"  # Port mismatch indicator
+            elif port_status["validation"] == "no_port_detected":
+                port_display += "?"  # No port detected indicator
+            elif port_status["validation"] == "dynamic_port":
+                port_display = (
+                    str(port_status["actual_port"]) + "~"
+                )  # Dynamic port indicator
+
+            colored_port = click.style(port_display, fg="cyan")
         else:
-            colored_port = str(service["port"])  # Default color when inactive
+            colored_port = port_display  # Default color when inactive
 
         # Green checkmark for enabled services
         enabled_mark = click.style("✓", fg="green", bold=True) if enabled else ""
@@ -506,7 +521,7 @@ def restart(name):
         return
 
     click.secho(
-        f"✓ Service '{click.style(name, fg='cyan', bold=True)}' restarted successfully",
+        f"✓ Service '{name}' restarted successfully",
         fg="green",
         bold=True,
         color=True,
@@ -1213,7 +1228,7 @@ def restart_all(enabled_only):
             failed_services.append(name)
         else:
             click.secho(
-                f"✓ {click.style(name, fg='cyan', bold=True)} restarted successfully",
+                f"✓ {name} restarted successfully",
                 fg="green",
                 bold=True,
                 color=True,

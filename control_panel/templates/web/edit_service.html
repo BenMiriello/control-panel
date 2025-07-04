@@ -20,26 +20,34 @@
 
     <div class="mb-3">
         <label for="port" class="form-label">Port</label>
-        {% if service.port_status.validation == 'dynamic_port' %}
-            <div class="alert alert-info">
-                <strong>Dynamic Port:</strong> This service uses port {{ service.port_status.actual_port }} (auto-detected).
-                <br>To set a manual port, check "Set manual port" below.
-            </div>
-            <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port_status.actual_port }}" disabled>
-        {% elif service.port_status.validation == 'port_mismatch' %}
+
+        <!-- Port status alerts (informational only) -->
+        {% if service.port_status.validation == 'port_mismatch' %}
             <div class="alert alert-warning">
                 <strong>Port Mismatch:</strong> Service is running on port {{ service.port_status.actual_port }} but configured for {{ service.port }}.
                 <br>Check "Set manual port" to override or "Detect port" to use the detected port.
             </div>
-            <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port }}">
-        {% else %}
-            <input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{ service.port }}">
+        {% elif service.port_status.validation == 'dynamic_port' %}
+            <div class="alert alert-info">
+                <strong>Dynamic Port:</strong> This service uses port {{ service.port_status.actual_port }} (auto-detected).
+                <br>To set a manual port, check "Set manual port" below.
+            </div>
         {% endif %}
-        {% if service.port_mode == 'auto_detect' %}
-            <span id="auto-detect-label" class="text-muted"> (auto-detected)</span>
-        {% else %}
-            <div class="form-text" id="manual-port-help">Leave empty to auto-detect port from the running service</div>
-        {% endif %}
+
+        <!-- Port input/display (always render both) -->
+        <input type="number" class="form-control" id="port" name="port" min="1" max="65535"
+               value="{{ service.port }}"
+               style="display: {{ 'none' if service.port_mode == 'auto_detect' else 'block' }};">
+
+        <span id="auto-detect-display" class="form-control-plaintext text-muted"
+              style="display: {{ 'block' if service.port_mode == 'auto_detect' else 'none' }};">
+            {{ service.port }} (auto-detected)
+        </span>
+
+        <div class="form-text" id="manual-port-help"
+             style="display: {{ 'none' if service.port_mode == 'auto_detect' else 'block' }};">
+            Leave empty to auto-detect port from the running service
+        </div>
     </div>
 
     <div class="mb-3 form-check">
@@ -98,26 +106,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle port detection
     if (detectPortCheckbox && portInput && portContainer) {
         const manualPortHelp = document.getElementById('manual-port-help');
-        const autoDetectLabel = document.getElementById('auto-detect-label');
+        const autoDetectDisplay = document.getElementById('auto-detect-display');
 
-        // Initialize if checkbox is already checked on page load
-        if (detectPortCheckbox.checked) {
-            originalPortValue = portInput.value;
-            showDetectedPort(portInput.value, true); // true = already detected
-        }
+        // Store original value on page load
+        originalPortValue = portInput.value;
 
         detectPortCheckbox.addEventListener('change', function() {
             if (this.checked) {
-                // Store current value if not already stored
-                if (!detectPortCheckbox.dataset.initialized) {
-                    originalPortValue = portInput.value;
-                }
-
-                // Hide manual help text
+                // Hide input and help text, show auto-detect display with "Detecting..."
+                portInput.style.display = 'none';
                 if (manualPortHelp) manualPortHelp.style.display = 'none';
-
-                // Show detecting state
-                showDetectedPort('Detecting...', false);
+                autoDetectDisplay.style.display = 'block';
+                autoDetectDisplay.textContent = 'Detecting...';
+                autoDetectDisplay.className = 'form-control-plaintext text-muted';
 
                 // Make AJAX call to detect port
                 const serviceName = '{{ service.name }}';
@@ -125,44 +126,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(response => response.json())
                     .then(data => {
                         if (data.success && data.port) {
-                            showDetectedPort(data.port + ' (auto-detected)', true);
+                            autoDetectDisplay.textContent = data.port + ' (auto-detected)';
                             portInput.value = data.port;
                         } else {
-                            showDetectedPort('⚠️ Port detection failed', false, 'text-warning');
+                            autoDetectDisplay.textContent = '⚠️ Port detection failed';
+                            autoDetectDisplay.className = 'form-control-plaintext text-warning';
                         }
                     })
                     .catch(error => {
                         console.error('Port detection error:', error);
-                        showDetectedPort('⚠️ Port detection failed', false, 'text-warning');
+                        autoDetectDisplay.textContent = '⚠️ Port detection failed';
+                        autoDetectDisplay.className = 'form-control-plaintext text-warning';
                     });
             } else {
-                // Restore original input
-                restoreManualInput();
+                // Show input and help text, hide auto-detect display
+                portInput.style.display = 'block';
+                if (manualPortHelp) manualPortHelp.style.display = 'block';
+                autoDetectDisplay.style.display = 'none';
+                portInput.value = originalPortValue;
             }
         });
-
-        function showDetectedPort(text, isSuccess, extraClass = '') {
-            portInput.style.display = 'none';
-            const detectingElement = document.getElementById('detecting-port') || createDetectingElement();
-            detectingElement.textContent = text;
-            detectingElement.className = `form-control-plaintext ${isSuccess ? 'text-muted' : 'text-muted'} ${extraClass}`;
-        }
-
-        function createDetectingElement() {
-            const detectingSpan = document.createElement('span');
-            detectingSpan.id = 'detecting-port';
-            portContainer.insertBefore(detectingSpan, portInput.nextSibling);
-            return detectingSpan;
-        }
-
-        function restoreManualInput() {
-            const detectingElement = document.getElementById('detecting-port');
-            if (detectingElement) detectingElement.remove();
-            if (autoDetectLabel) autoDetectLabel.style.display = 'none';
-            if (manualPortHelp) manualPortHelp.style.display = '';
-            portInput.style.display = '';
-            portInput.value = originalPortValue;
-        }
     }
 });
 </script>

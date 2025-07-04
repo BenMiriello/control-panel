@@ -376,16 +376,20 @@ def list():
     for name, service in config["services"].items():
         status, enabled = get_service_status(name)
 
-        # Color-code the service name based on status
+        # Service names always default color (not colored by status)
+        colored_name = name
+
+        # Color-code the status
         if status == "active":
-            colored_name = click.style(name, fg="green", bold=True)
             colored_status = click.style("active", fg="green")
         else:
-            colored_name = click.style(name, fg="red")
-            colored_status = click.style(status, fg="red")
+            colored_status = status  # Default color for inactive status
 
-        # Color-code the port
-        colored_port = click.style(str(service["port"]), fg="cyan")
+        # Port color: default when service off, cyan when active
+        if status == "active":
+            colored_port = click.style(str(service["port"]), fg="cyan")
+        else:
+            colored_port = str(service["port"])  # Default color when inactive
 
         # Green checkmark for enabled services
         enabled_mark = click.style("✓", fg="green", bold=True) if enabled else ""

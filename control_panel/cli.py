@@ -1014,6 +1014,8 @@ _panel_completion() {
                 'open-browser:Open service URL'
                 'unregister:Unregister a service'
                 'edit:Edit service configuration'
+                'status:Show service status and port management details'
+                'info:Show detailed service information (alias for status)'
                 'web:Start web UI'
                 'completion:Setup shell completion'
             )
@@ -1021,7 +1023,7 @@ _panel_completion() {
             ;;
         args)
             case $words[2] in
-                start|stop|restart|auto|disable|logs|unregister|edit|open-browser)
+                start|stop|restart|auto|disable|logs|unregister|edit|open-browser|status|info)
                     # Get service list directly
                     local services=(${(f)"$(python3 -c "import json; f=open('$HOME/.config/control-panel/services.json'); data=json.load(f); print('\\\\n'.join(data['services'].keys()))" 2>/dev/null)"})
                     if [[ ${#services[@]} -gt 0 ]]; then
@@ -1257,6 +1259,16 @@ def restart_all(enabled_only):
             color=True,
         )
 
+
+# Import and register additional command modules
+try:
+    from .commands.status_commands import info, status
+
+    cli.add_command(status)
+    cli.add_command(info)
+except ImportError:
+    # Fallback for development/testing
+    pass
 
 # Export the CLI function as main for entry_point in setup.py
 main = cli

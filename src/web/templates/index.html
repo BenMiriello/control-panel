@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+
+{% block title %}Control Panel - Dashboard{% endblock %}
+
+{% block content %}
+{% include 'metrics_widget.html' %}
+
+<div class="row mb-4">
+    <div class="col">
+        <h3>Registered Services</h3>
+    </div>
+    <div class="col-auto">
+        <a href="/ranges/add" class="btn btn-outline-secondary">Add Port Range</a>
+    </div>
+</div>
+
+{% if services %}
+<div class="row">
+    {% for service in services %}
+    <div class="col-lg-6 col-12">
+        <div class="card service-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ service.name }}</h5>
+                <div>
+                    {% if service.status == 'active' %}
+		    <a href="javascript:void(0)" onclick="window.open('http://'+window.location.hostname+':{{ service.port }}', '_blank')" class="badge bg-primary" style="color: #ffffff; text-decoration: none">Open</a>
+                    <span class="badge bg-success">Running</span>
+                    {% else %}
+                    <span class="badge bg-danger">Stopped</span>
+                    {% endif %}
+
+                    {% if service.enabled %}
+                    <span class="badge bg-info">Auto-start</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <p><strong>Port:</strong>
+                    {% if service.port_status.validation == 'port_matches' %}
+                        <span class="text-success">{{ service.port }}</span> <span class="text-success" title="Port matches configuration">✓</span>
+                    {% elif service.port_status.validation == 'port_mismatch' %}
+                        <span class="text-warning" title="Service running on port {{ service.port_status.actual_port }} but configured for {{ service.port_status.configured_port }}">{{ service.port }}</span> <span class="text-danger" title="Port mismatch">*</span>
+                    {% elif service.port_status.validation == 'dynamic_port' %}
+                        <span class="text-info" title="Service using dynamic port {{ service.port_status.actual_port }}">{{ service.port_status.actual_port }}</span> <span class="text-muted" title="Dynamic port">~</span>
+                    {% elif service.port_status.validation == 'no_port_detected' %}
+                        <span class="text-muted" title="No port detected">{{ service.port or 'None' }}</span> <span class="text-warning" title="No port detected">?</span>
+                    {% else %}
+                        {{ service.port or 'None' }}
+                    {% endif %}
+                </p>
+                <p class="d-flex align-items-start">
+                    {% if service.command|length > 50 %}
+                        <span class="command-toggle-container" style="display: inline-block; width: 12px; text-align: center; margin-right: 4px;">
+                            <span class="command-toggle" style="cursor: pointer; color: black; text-decoration: none; user-select: none;" title="Toggle command display">▶</span>
+                        </span>
+                    {% endif %}
+                    <span style="margin-right: 6px;"><strong>Command:</strong></span>
+                    <span class="command-display" style="flex: 1; min-width: 0;">
+                        {% if service.command|length > 50 %}
+                            <span class="command-short">
+                                <code style="display: inline-block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top;">{{ service.command }}</code>
+                            </span>
+                            <span class="command-full d-none">
+                                <code style="display: inline-block; width: 100%; word-break: break-all; white-space: pre-wrap; vertical-align: top;">{{ service.command }}</code>
+                            </span>
+                        {% else %}
+                            <code>{{ service.command }}</code>
+                        {% endif %}
+                    </span>
+                </p>
+
+                <div class="btn-group">
+                    {% if service.status == 'active' %}
+                    <a href="/services/control/{{ service.name }}/stop" class="btn btn-sm btn-warning btn-actions">Stop</a>
+                    <a href="/services/control/{{ service.name }}/restart" class="btn btn-sm btn-primary btn-actions">Restart</a>
+                    {% else %}
+                    <a href="/services/control/{{ service.name }}/start" class="btn btn-sm btn-success btn-actions">Start</a>
+                    {% endif %}
+
+                    {% if service.enabled %}
+                    <a href="/services/control/{{ service.name }}/disable" class="btn btn-sm btn-outline-secondary btn-actions">Disable Auto-start</a>
+                    {% else %}
+                    <a href="/services/control/{{ service.name }}/enable" class="btn btn-sm btn-outline-info btn-actions">Enable Auto-start</a>
+                    {% endif %}
+
+                    <a href="/logs/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Logs</a>
+                    <a href="/services/edit/{{ service.name }}" class="btn btn-sm btn-info btn-actions">Edit</a>
+                    <a href="/services/delete/{{ service.name }}" class="btn btn-sm btn-danger btn-actions" onclick="return confirm('Are you sure you want to delete this service?')">Delete</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">
+    No services registered yet. <a href="/services/add" class="alert-link">Add a service</a> to get started.
+</div>
+{% endif %}
+
+<div class="mt-5">
+    <h3>Port Ranges</h3>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Range Name</th>
+                <th>Start Port</th>
+                <th>End Port</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for name, range in port_ranges.items() %}
+            <tr>
+                <td>{{ name }}</td>
+                <td>{{ range.start }}</td>
+                <td>{{ range.end }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle command toggle functionality
+    document.querySelectorAll('.command-toggle').forEach(function(toggle) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Navigate to the command display within the same paragraph
+            const paragraph = this.closest('p');
+            const commandDisplay = paragraph.querySelector('.command-display');
+            const shortSpan = commandDisplay.querySelector('.command-short');
+            const fullSpan = commandDisplay.querySelector('.command-full');
+
+            if (shortSpan.classList.contains('d-none')) {
+                // Currently showing full, switch to short
+                shortSpan.classList.remove('d-none');
+                fullSpan.classList.add('d-none');
+                this.textContent = '▶';
+                this.title = 'Expand command';
+            } else {
+                // Currently showing short, switch to full
+                shortSpan.classList.add('d-none');
+                fullSpan.classList.remove('d-none');
+                this.textContent = '▼';
+                this.title = 'Collapse command';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

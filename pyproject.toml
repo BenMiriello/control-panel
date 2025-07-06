@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "control-panel"
-dynamic = ["version"]
+version = "1.0.0"
 description = "Service management and control panel"
 readme = "README.md"
 license = {text = "MIT"}
@@ -42,13 +42,12 @@ dev = [
 ]
 
 [project.scripts]
-panel = "control_panel.cli:main"
+panel = "cli.main:main"
 
-[tool.setuptools.dynamic]
-version = {attr = "control_panel.__version__"}
 
 [tool.setuptools.packages.find]
-include = ["control_panel*"]
+where = ["src"]
+include = ["*"]
 
 # Ruff configuration
 [tool.ruff]
@@ -89,7 +88,7 @@ per-file-ignores = {"__init__.py" = ["F401"], "tests/*" = ["S101", "S608"]}
 [tool.ruff.lint.isort]
 force-single-line = false
 force-sort-within-sections = true
-known-first-party = ["control_panel"]
+known-first-party = ["cli", "web", "core"]
 
 # Black configuration
 [tool.black]
@@ -135,7 +134,7 @@ minversion = "7.0"
 addopts = [
     "--strict-config",
     "--strict-markers",
-    "--cov=control_panel",
+    "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
@@ -147,7 +146,7 @@ python_classes = ["Test*"]
 
 # Coverage configuration
 [tool.coverage.run]
-source = ["control_panel"]
+source = ["src"]
 omit = [
     "*/tests/*",
     "*/test_*.py",

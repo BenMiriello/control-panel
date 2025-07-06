@@ -1,10 +1,9 @@
-# Include templates and static files
-recursive-include templates *
-recursive-include static *
+# Include templates and static files for web interface
+recursive-include src/web/templates *
+recursive-include src/web/static *
 
-# Copy templates and static files into the package
-recursive-include control_panel/templates *
-recursive-include control_panel/static *
+# Include systemd service template
+include src/core/service-template.service
 
 # Include example configs
 recursive-include examples *

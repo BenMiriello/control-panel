@@ -46,12 +46,12 @@ def format_port_display(port_status):
     else:
         port_display = str(primary_port)
 
-    # Add validation indicators
+    # Add validation indicators - only show when something's wrong
     if validation == "port_mismatch":
-        port_display += "*"  # Port mismatch indicator
-    elif validation == "no_port_detected":
+        port_display += "*"  # Port mismatch indicator (yellow)
+    elif validation == "no_port_detected" or validation == "unknown":
         port_display += "?"  # No port detected indicator
-    elif validation == "dynamic_port":
-        port_display += "~"  # Dynamic port indicator
+    # service_stopped validation for auto-detect services = no indicator (expected behavior)
+    # Remove dynamic_port indicator (~) - working auto-detect doesn't need indicator
 
     return port_display

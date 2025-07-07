@@ -182,17 +182,16 @@ def _show_services_table(active_only=False):
         else:
             colored_status = status_info
 
-        # Port display with validation indicators (for active services)
-        if status_info == "active":
-            port_status = get_service_port_status(name)
-            # Import format_port_display from cli_utils
-            from ..cli_utils import format_port_display
+        # Port display with validation indicators (for all services)
+        port_status = get_service_port_status(name)
+        # Import format_port_display from cli_utils
+        from ..cli_utils import format_port_display
 
-            port_display = format_port_display(port_status)
+        port_display = format_port_display(port_status)
+        if status_info == "active":
             colored_port = click.style(port_display, fg="cyan")
         else:
-            # Inactive services show configured port without indicators
-            port_display = str(service.get("port", "none"))
+            # Inactive services don't get colored ports but still get indicators
             colored_port = port_display
 
         # Auto-start indicator

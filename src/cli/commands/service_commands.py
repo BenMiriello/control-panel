@@ -135,14 +135,19 @@ def edit(name, command, port, path, env_add, env_remove, detect_port):
 
     # Detect port from running service
     if detect_port:
-        from control_panel.utils.service import detect_service_port
+        from core.services.ports import detect_service_port, set_port_management_mode
 
         detected_port = detect_service_port(name)
         if detected_port:
-            service["port"] = detected_port
-            service["env"]["PORT"] = str(detected_port)
-            changes_made = True
-            click.echo(f"🔍 Detected and set port: {detected_port}")
+            # Switch to auto-detect mode and update port
+            success, message = set_port_management_mode(name, "auto_detect")
+            if success:
+                changes_made = True
+                click.echo(
+                    f"🔍 Detected port {detected_port} and switched to auto-detect mode"
+                )
+            else:
+                click.echo(f"❌ Error setting auto-detect mode: {message}")
         else:
             click.secho("⚠ Could not detect port from running service", fg="yellow")
 

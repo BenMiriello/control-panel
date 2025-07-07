@@ -1,9 +1,254 @@
 #!/usr/bin/env python3
 
+import json
 import subprocess
 
 from ..config import load_config, save_config
 from .lifecycle import get_service_status
+
+# Container Detection Functions
+
+
+def detect_container_service(service_name, command):
+    """Detect if service is containerized and get port info"""
+    if not command:
+        return None
+
+    command_lower = command.lower()
+
+    # Check for container runtimes in command
+    if "docker" in command_lower:
+        return detect_docker_ports(service_name)
+    elif "podman" in command_lower:
+        return detect_podman_ports(service_name)
+
+    # Check if command is a script file that might contain container commands
+    if command.endswith(".sh") or "/scripts/" in command:
+        try:
+            # Try to read the script and check for container commands
+            script_path = command.split()[0]  # Get just the script path, not args
+            with open(script_path) as f:
+                script_content = f.read().lower()
+
+            if "docker" in script_content:
+                return detect_docker_ports(service_name)
+            elif "podman" in script_content:
+                return detect_podman_ports(service_name)
+
+        except (OSError, FileNotFoundError, PermissionError):
+            # Script not readable, fallback to direct container detection
+            pass
+
+    return None
+
+
+def detect_docker_ports(service_name):
+    """Get Docker container ports for service"""
+    try:
+        # Check if docker command is available
+        result = subprocess.run(["docker", "--version"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+
+        # Get running containers
+        result = subprocess.run(
+            ["docker", "ps", "--format", "json"], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return None
+
+        containers = []
+        for line in result.stdout.strip().split("\n"):
+            if line.strip():
+                try:
+                    containers.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+        # Find container by name pattern or label
+        target_container = None
+        for container in containers:
+            names = container.get("Names", "")
+            labels = container.get("Labels", "")
+
+            # Check if service name matches container name or is in labels
+            if (
+                service_name in names
+                or service_name in labels
+                or names.replace("-", "_") == service_name.replace("-", "_")
+            ):
+                target_container = container
+                break
+
+        if not target_container:
+            return None
+
+        container_id = target_container["ID"]
+        container_name = target_container["Names"]
+
+        # Get port mappings using docker port
+        port_result = subprocess.run(
+            ["docker", "port", container_id], capture_output=True, text=True
+        )
+
+        port_mappings = {}
+        internal_ports = []
+        external_ports = []
+
+        # Check network mode first to determine port detection strategy
+        inspect_result = subprocess.run(
+            ["docker", "inspect", container_id], capture_output=True, text=True
+        )
+        network_mode = "bridge"  # default
+        exposed_ports = []
+
+        if inspect_result.returncode == 0:
+            try:
+                inspect_data = json.loads(inspect_result.stdout)[0]
+                network_mode = inspect_data.get("HostConfig", {}).get(
+                    "NetworkMode", "bridge"
+                )
+
+                # Get exposed ports from container config
+                config_exposed = inspect_data.get("Config", {}).get("ExposedPorts", {})
+                for port_spec in config_exposed.keys():
+                    port_num = port_spec.split("/")[0]
+                    exposed_ports.append(port_num)
+
+            except (json.JSONDecodeError, IndexError, KeyError):
+                pass
+
+        if network_mode == "host":
+            # For host network containers, exposed ports are directly accessible
+            # Use exposed ports from container configuration
+            external_ports = exposed_ports
+            internal_ports = exposed_ports
+            for port in exposed_ports:
+                port_mappings[f"{port}/tcp"] = port
+        else:
+            # For bridge/other networks, parse docker port output
+            if port_result.returncode == 0:
+                # Parse docker port output: "8080/tcp -> 0.0.0.0:3001"
+                for line in port_result.stdout.strip().split("\n"):
+                    if line.strip() and "->" in line:
+                        internal_part, external_part = line.split(" -> ", 1)
+                        internal_port = internal_part.split("/")[0]
+
+                        # Extract external port from "0.0.0.0:3001" or ":::3001"
+                        if ":" in external_part:
+                            external_port = external_part.split(":")[-1]
+                        else:
+                            external_port = external_part
+
+                        port_mappings[internal_part] = external_port
+                        internal_ports.append(internal_port)
+                        external_ports.append(external_port)
+
+        return {
+            "runtime": "docker",
+            "container_id": container_id,
+            "container_name": container_name,
+            "network_mode": network_mode,
+            "port_mappings": port_mappings,
+            "internal_ports": internal_ports,
+            "external_ports": external_ports,
+        }
+
+    except Exception:
+        # Container detection failed, not necessarily an error
+        return None
+
+
+def detect_podman_ports(service_name):
+    """Get Podman container ports for service"""
+    try:
+        # Check if podman command is available
+        result = subprocess.run(["podman", "--version"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+
+        # Get running containers (podman uses same format as docker)
+        result = subprocess.run(
+            ["podman", "ps", "--format", "json"], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return None
+
+        containers = []
+        for line in result.stdout.strip().split("\n"):
+            if line.strip():
+                try:
+                    containers.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+        # Find container by name pattern
+        target_container = None
+        for container in containers:
+            names = container.get("Names", "")
+            if service_name in names or names.replace("-", "_") == service_name.replace(
+                "-", "_"
+            ):
+                target_container = container
+                break
+
+        if not target_container:
+            return None
+
+        container_id = target_container["Id"]
+        container_name = target_container["Names"]
+
+        # Get port mappings using podman port
+        port_result = subprocess.run(
+            ["podman", "port", container_id], capture_output=True, text=True
+        )
+
+        port_mappings = {}
+        internal_ports = []
+        external_ports = []
+
+        if port_result.returncode == 0:
+            # Parse podman port output (same format as docker)
+            for line in port_result.stdout.strip().split("\n"):
+                if line.strip() and "->" in line:
+                    internal_part, external_part = line.split(" -> ", 1)
+                    internal_port = internal_part.split("/")[0]
+
+                    if ":" in external_part:
+                        external_port = external_part.split(":")[-1]
+                    else:
+                        external_port = external_part
+
+                    port_mappings[internal_part] = external_port
+                    internal_ports.append(internal_port)
+                    external_ports.append(external_port)
+
+        # Check network mode
+        inspect_result = subprocess.run(
+            ["podman", "inspect", container_id], capture_output=True, text=True
+        )
+        network_mode = "bridge"  # default
+        if inspect_result.returncode == 0:
+            try:
+                inspect_data = json.loads(inspect_result.stdout)[0]
+                network_mode = inspect_data.get("HostConfig", {}).get(
+                    "NetworkMode", "bridge"
+                )
+            except (json.JSONDecodeError, IndexError, KeyError):
+                pass
+
+        return {
+            "runtime": "podman",
+            "container_id": container_id,
+            "container_name": container_name,
+            "network_mode": network_mode,
+            "port_mappings": port_mappings,
+            "internal_ports": internal_ports,
+            "external_ports": external_ports,
+        }
+
+    except Exception:
+        return None
 
 
 def check_service_running(name, port):
@@ -23,6 +268,33 @@ def check_service_running(name, port):
 def detect_service_ports(name):
     """Detect all ports used by a service and its process group with PID relationships"""
     try:
+        # First, check if this is a containerized service
+        config = load_config()
+        service_config = config.get("services", {}).get(name, {})
+        service_command = service_config.get("command", "")
+
+        # Try container detection first
+        container_info = detect_container_service(name, service_command)
+        if container_info:
+            # For containerized services, convert container ports to detected_ports format
+            detected_ports = {}
+            if container_info["external_ports"]:
+                # Use container ID as PID for consistency with existing format
+                container_id = container_info["container_id"][:12]  # Short ID
+                for port in container_info["external_ports"]:
+                    try:
+                        detected_ports[container_id] = int(port)
+                        break  # Use first external port as primary
+                    except ValueError:
+                        continue
+
+            return {
+                "detected_ports": detected_ports,
+                "main_pid": None,
+                "container_info": container_info,
+            }
+
+        # Fallback to traditional process detection for non-containerized services
         # Get main process ID from systemd
         result = subprocess.run(
             [
@@ -103,28 +375,46 @@ def detect_service_ports(name):
         return {"detected_ports": {}, "main_pid": None}
 
 
-def select_primary_port(detected_ports, main_pid=None):
-    """Select primary port using smart priority logic"""
+def select_primary_port(detected_ports, main_pid=None, container_info=None):
+    """Select primary port using smart priority logic with container support"""
     if not detected_ports:
         return None
 
     all_ports = list(detected_ports.values())
+
+    # For containerized services, use container-specific logic
+    if container_info:
+        external_ports = container_info.get("external_ports", [])
+        if external_ports:
+            # Apply web heuristics to container external ports
+            return apply_web_port_heuristics(
+                [int(p) for p in external_ports if p.isdigit()]
+            )
 
     # Priority 1: SystemD MainPID port (if available)
     if main_pid and main_pid in detected_ports:
         return detected_ports[main_pid]
 
     # Priority 2: Web port heuristic (common web ports)
+    return apply_web_port_heuristics(all_ports)
+
+
+def apply_web_port_heuristics(ports):
+    """Apply web port selection heuristics to a list of ports"""
+    if not ports:
+        return None
+
     web_port_ranges = [
         (80, 80),
         (443, 443),  # Standard HTTP/HTTPS
         (3000, 3010),  # Development servers (React, Express, etc.)
         (5000, 5010),  # Flask, etc.
         (8000, 8090),  # Django, web servers, etc.
+        (11430, 11440),  # Ollama range
     ]
 
     web_ports = []
-    for port in all_ports:
+    for port in ports:
         for start, end in web_port_ranges:
             if start <= port <= end:
                 web_ports.append(port)
@@ -133,8 +423,8 @@ def select_primary_port(detected_ports, main_pid=None):
     if web_ports:
         return min(web_ports)  # Lowest web port
 
-    # Priority 3: Lowest overall port (fallback)
-    return min(all_ports)
+    # Fallback: Lowest overall port
+    return min(ports)
 
 
 def detect_service_port(name):
@@ -142,8 +432,9 @@ def detect_service_port(name):
     port_data = detect_service_ports(name)
     detected_ports = port_data["detected_ports"]
     main_pid = port_data["main_pid"]
+    container_info = port_data.get("container_info")
 
-    return select_primary_port(detected_ports, main_pid)
+    return select_primary_port(detected_ports, main_pid, container_info)
 
 
 def get_service_port_status(name):
@@ -175,11 +466,17 @@ def get_service_port_status(name):
     status, _ = get_service_status(name)
 
     if status != "active":
+        # For stopped services, validation depends on port management mode
+        if port_management == "auto_detect":
+            validation = "service_stopped"  # Auto-detect services don't need indicators when stopped
+        else:
+            validation = "unknown"  # Managed services get ? when stopped
+
         return {
             "status": "service_stopped",
             "configured_port": managed_port,
             "actual_port": None,
-            "validation": "unknown",
+            "validation": validation,
             "port_management": port_management,
             "managed_port": managed_port,
             "primary_port": managed_port,

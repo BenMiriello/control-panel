@@ -20,49 +20,25 @@
 
     <div class="mb-3">
         <label for="port" class="form-label">Port</label>
-
-        <!-- Port status alerts (informational only) -->
-        {% if service.port_status.validation == 'port_mismatch' %}
-            <div class="alert alert-warning">
-                <strong>Port Mismatch:</strong> Service is running on port {{ service.port_status.actual_port }} but configured for {{ service.port }}.
-                <br>Check "Set manual port" to override or "Detect port" to use the detected port.
-            </div>
-        {% elif service.port_status.validation == 'dynamic_port' %}
-            <div class="alert alert-info">
-                <strong>Dynamic Port:</strong> This service uses port {{ service.port_status.actual_port }} (auto-detected).
-                <br>To set a manual port, check "Set manual port" below.
-            </div>
-        {% endif %}
-
-        <!-- Port input/display (always render both) -->
         <input type="number" class="form-control" id="port" name="port" min="1" max="65535"
-               value="{{ service.port }}"
-               style="display: {{ 'none' if service.port_mode == 'auto_detect' else 'block' }};">
+               value="{{ service.port_status.actual_port or service.port }}"
+               {% if service.port_status.port_management == 'auto_detect' %}disabled{% endif %}>
+        <small id="auto-detect-label" class="text-muted"
+               {% if service.port_status.port_management != 'auto_detect' %}style="display: none;"{% endif %}>(Auto-detected)</small>
 
-        <span id="auto-detect-display" class="form-control-plaintext text-muted"
-              style="display: {{ 'block' if service.port_mode == 'auto_detect' else 'none' }};">
-            {{ service.port }} (auto-detected)
-        </span>
-
-        <div class="form-text" id="manual-port-help"
-             style="display: {{ 'none' if service.port_mode == 'auto_detect' else 'block' }};">
-            Leave empty to auto-detect port from the running service
+        <div style="margin-top: 8px;">
+            <div>
+                <input type="radio" id="mode_managed" name="port_mode" value="managed"
+                       {% if service.port_status.port_management == 'managed' %}checked{% endif %}>
+                <label for="mode_managed">Manual port</label>
+            </div>
+            <div>
+                <input type="radio" id="mode_auto_detect" name="port_mode" value="auto_detect"
+                       {% if service.port_status.port_management == 'auto_detect' %}checked{% endif %}>
+                <label for="mode_auto_detect">Auto-detect port</label>
+            </div>
         </div>
     </div>
-
-    <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" id="detect_port" name="detect_port" {% if service.port_mode == 'auto_detect' %}checked{% endif %}>
-        <label class="form-check-label" for="detect_port">Detect actual port from running service</label>
-        <div class="form-text">Use this if the service sets its own port different from what's configured</div>
-    </div>
-
-    {% if service.port_status.validation in ['dynamic_port', 'port_mismatch'] %}
-    <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" id="set_manual_port" name="set_manual_port">
-        <label class="form-check-label" for="set_manual_port">Set manual port and disable auto-detection</label>
-        <div class="form-text">This will configure a static port for the service</div>
-    </div>
-    {% endif %}
 
     <div class="mb-3">
         <label for="path" class="form-label">Path</label>
@@ -83,70 +59,50 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const setManualPortCheckbox = document.getElementById('set_manual_port');
     const portInput = document.getElementById('port');
-    const detectPortCheckbox = document.getElementById('detect_port');
+    const managedRadio = document.getElementById('mode_managed');
+    const autoDetectRadio = document.getElementById('mode_auto_detect');
+    const autoDetectLabel = document.getElementById('auto-detect-label');
 
-    // Store original value
-    let originalPortValue = portInput ? portInput.value : '';
-    let portContainer = portInput ? portInput.parentElement : null;
+    // Store original port value from server
+    const originalPort = '{{ service.port }}';
 
-    // Handle manual port setting
-    if (setManualPortCheckbox && portInput) {
-        setManualPortCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                portInput.disabled = false;
-                portInput.focus();
-            } else {
-                portInput.disabled = true;
-            }
-        });
-    }
+    // Simple radio button handling - just enable/disable field
+    managedRadio.addEventListener('change', function() {
+        if (this.checked) {
+            portInput.disabled = false;
+            autoDetectLabel.style.display = 'none';
+            // Restore original managed port when switching back to manual
+            portInput.value = originalPort;
+        }
+    });
 
-    // Handle port detection
-    if (detectPortCheckbox && portInput && portContainer) {
-        const manualPortHelp = document.getElementById('manual-port-help');
-        const autoDetectDisplay = document.getElementById('auto-detect-display');
+    autoDetectRadio.addEventListener('change', function() {
+        if (this.checked) {
+            portInput.disabled = true;
+            autoDetectLabel.style.display = 'block';
+            // Show detecting state immediately
+            const originalValue = portInput.value;
+            portInput.value = 'Detecting...';
 
-        // Store original value on page load
-        originalPortValue = portInput.value;
-
-        detectPortCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                // Hide input and help text, show auto-detect display with "Detecting..."
-                portInput.style.display = 'none';
-                if (manualPortHelp) manualPortHelp.style.display = 'none';
-                autoDetectDisplay.style.display = 'block';
-                autoDetectDisplay.textContent = 'Detecting...';
-                autoDetectDisplay.className = 'form-control-plaintext text-muted';
-
-                // Make AJAX call to detect port
-                const serviceName = '{{ service.name }}';
-                fetch(`/api/services/${serviceName}/detect-port`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success && data.port) {
-                            autoDetectDisplay.textContent = data.port + ' (auto-detected)';
-                            portInput.value = data.port;
-                        } else {
-                            autoDetectDisplay.textContent = '⚠️ Port detection failed';
-                            autoDetectDisplay.className = 'form-control-plaintext text-warning';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Port detection error:', error);
-                        autoDetectDisplay.textContent = '⚠️ Port detection failed';
-                        autoDetectDisplay.className = 'form-control-plaintext text-warning';
-                    });
-            } else {
-                // Show input and help text, hide auto-detect display
-                portInput.style.display = 'block';
-                if (manualPortHelp) manualPortHelp.style.display = 'block';
-                autoDetectDisplay.style.display = 'none';
-                portInput.value = originalPortValue;
-            }
-        });
-    }
+            const serviceName = '{{ service.name }}';
+            fetch(`/api/services/${serviceName}/detect-port`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.port) {
+                        portInput.value = data.port;
+                    } else {
+                        portInput.value = 'Detection failed';
+                        autoDetectLabel.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Port detection error:', error);
+                    portInput.value = 'Detection failed';
+                    autoDetectLabel.style.display = 'none';
+                });
+        }
+    });
 });
 </script>
 {% endblock %}

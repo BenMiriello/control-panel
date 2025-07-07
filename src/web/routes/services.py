@@ -2,7 +2,7 @@
 
 import subprocess
 
-from flask import redirect, render_template, request, url_for
+from flask import jsonify, redirect, render_template, request, url_for
 
 from core.config import load_config, save_config
 from core.service import (
@@ -11,9 +11,9 @@ from core.service import (
     get_service_port_status,
     register_service,
     rename_service,
-    set_port_mode,
     unregister_service,
 )
+from core.services.ports import set_port_management_mode
 
 
 def register_service_routes(app):
@@ -200,8 +200,7 @@ def register_service_routes(app):
             port = request.form.get("port", "").strip()
             working_dir = request.form.get("path", "").strip()
             env_vars = request.form.get("env_vars", "").strip()
-            detect_port = request.form.get("detect_port") == "on"
-            set_manual_port = request.form.get("set_manual_port") == "on"
+            port_mode = request.form.get("port_mode", "managed")
 
             try:
                 # Handle service name change first if needed
@@ -231,10 +230,16 @@ def register_service_routes(app):
                 if working_dir:
                     service["working_dir"] = working_dir
 
-                # Handle port mode setting
-                if set_manual_port and port:
-                    port_num = int(port)
-                    success, message = set_port_mode(name, "static", port_num)
+                # Handle port mode setting - ALWAYS set the mode regardless of port value
+                if port_mode == "managed":
+                    if port and port.isdigit():
+                        port_num = int(port)
+                        success, message = set_port_management_mode(
+                            name, "managed", port_num
+                        )
+                    else:
+                        success, message = set_port_management_mode(name, "managed")
+
                     if not success:
                         return redirect(
                             url_for(
@@ -245,46 +250,38 @@ def register_service_routes(app):
                                 message=message,
                             )
                         )
-                    service["port"] = port_num
-                # Try to detect port if requested
-                elif detect_port:
+                elif port_mode == "auto_detect":
+                    # If switching to auto-detect, try to detect port and use it as managed port
                     detected_port = detect_service_port(name)
                     if detected_port:
-                        service["port"] = detected_port
-                        service[
-                            "port_mode"
-                        ] = "auto_detect"  # Track that this was auto-detected
-                        port = str(detected_port)
+                        success, message = set_port_management_mode(name, "auto_detect")
+                        if success:
+                            # Update the managed port to the detected value
+                            config = load_config()
+                            config["services"][name]["managed_port"] = detected_port
+                            save_config(config)
+                        else:
+                            return redirect(
+                                url_for(
+                                    "index",
+                                    action="edit",
+                                    service=name,
+                                    status="error",
+                                    message=message,
+                                )
+                            )
                     else:
-                        return redirect(
-                            url_for(
-                                "index",
-                                action="edit",
-                                service=name,
-                                status="error",
-                                message="Service is not running or no port detected",
+                        success, message = set_port_management_mode(name, "auto_detect")
+                        if not success:
+                            return redirect(
+                                url_for(
+                                    "index",
+                                    action="edit",
+                                    service=name,
+                                    status="error",
+                                    message=message,
+                                )
                             )
-                        )
-                # Update port if provided
-                elif port:
-                    try:
-                        port_num = int(port)
-                        if not (1 <= port_num <= 65535):
-                            raise ValueError("Port must be between 1-65535")
-                        service["port"] = port_num
-                        service[
-                            "port_mode"
-                        ] = "static"  # Track that this was manually set
-                    except ValueError as e:
-                        return redirect(
-                            url_for(
-                                "index",
-                                action="edit",
-                                service=name,
-                                status="error",
-                                message=f"Invalid port: {e}",
-                            )
-                        )
 
                 # Initialize environment variables if not present
                 if "env" not in service:
@@ -337,3 +334,15 @@ def register_service_routes(app):
         service_with_name["port_status"] = port_status
 
         return render_template("edit_service.html", service=service_with_name)
+
+    @app.route("/api/services/<name>/detect-port")
+    def api_detect_port(name):
+        """API endpoint to detect port for a service"""
+        try:
+            detected_port = detect_service_port(name)
+            if detected_port:
+                return jsonify({"success": True, "port": detected_port})
+            else:
+                return jsonify({"success": False, "error": "No port detected"})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})

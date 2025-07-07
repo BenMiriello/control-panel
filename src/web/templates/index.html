@@ -35,15 +35,31 @@
                 </div>
             </div>
             <div class="card-body">
-                <p><strong>Port:</strong>
-                    {% if service.port_status.validation == 'port_mismatch' %}
-                        <span title="Service running on port {{ service.port_status.actual_port }} but configured for {{ service.port_status.configured_port }}">{{ service.port_status.actual_port or service.port }}</span> <span class="text-warning" title="Port mismatch">*</span>
-                    {% elif service.port_status.validation == 'no_port_detected' or service.port_status.validation == 'unknown' %}
-                        <span title="No port detected">{{ service.port or 'None' }}</span> <span class="text-muted" title="No port detected">?</span>
-                    {% else %}
-                        {{ service.port_status.actual_port or service.port or 'None' }}
+                <p class="d-flex align-items-start">
+                    {% if service.status == 'active' %}
+                        <span class="port-toggle-container" style="display: inline-block; width: 12px; text-align: center; margin-right: 4px;">
+                            <span class="port-toggle" style="cursor: pointer; color: black; text-decoration: none; user-select: none;" title="Show port details">▶</span>
+                        </span>
                     {% endif %}
+                    <span style="margin-right: 6px;"><strong>Port:</strong></span>
+                    <span style="flex: 1;">
+                        {% if service.port_status.validation == 'port_mismatch' %}
+                            <span title="Service running on port {{ service.port_status.actual_port }} but configured for {{ service.port_status.configured_port }}">{{ service.port_status.actual_port or service.port }}</span> <span class="text-warning" title="Port mismatch">*</span>
+                        {% elif service.port_status.validation == 'no_port_detected' or service.port_status.validation == 'unknown' %}
+                            <span title="No port detected">{{ service.port or 'None' }}</span> <span class="text-muted" title="No port detected">?</span>
+                        {% else %}
+                            {{ service.port_status.actual_port or service.port or 'None' }}
+                        {% endif %}
+                    </span>
                 </p>
+
+                {% if service.status == 'active' %}
+                <div class="port-details d-none" style="margin-left: 16px; margin-bottom: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; font-size: 0.9em;">
+                    <div class="port-detail-content" data-service="{{ service.name }}">
+                        <em>Loading port details...</em>
+                    </div>
+                </div>
+                {% endif %}
                 <p class="d-flex align-items-start">
                     {% if service.command|length > 50 %}
                         <span class="command-toggle-container" style="display: inline-block; width: 12px; text-align: center; margin-right: 4px;">
@@ -147,6 +163,52 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Handle port toggle functionality
+    document.querySelectorAll('.port-toggle').forEach(function(toggle) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Find the port details section
+            const card = this.closest('.card-body');
+            const portDetails = card.querySelector('.port-details');
+            const portContent = portDetails.querySelector('.port-detail-content');
+            const serviceName = portContent.getAttribute('data-service');
+
+            if (portDetails.classList.contains('d-none')) {
+                // Show port details
+                this.textContent = '▼';
+                this.title = 'Hide port details';
+                portDetails.classList.remove('d-none');
+
+                // Load port details if not already loaded
+                if (portContent.innerHTML.includes('Loading port details...')) {
+                    loadPortDetails(serviceName, portContent);
+                }
+            } else {
+                // Hide port details
+                this.textContent = '▶';
+                this.title = 'Show port details';
+                portDetails.classList.add('d-none');
+            }
+        });
+    });
 });
+
+function loadPortDetails(serviceName, contentElement) {
+    fetch(`/api/services/${serviceName}/port-details`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                contentElement.innerHTML = data.html;
+            } else {
+                contentElement.innerHTML = '<span class="text-muted">No detailed port information available</span>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading port details:', error);
+            contentElement.innerHTML = '<span class="text-danger">Error loading port details</span>';
+        });
+}
 </script>
 {% endblock %}

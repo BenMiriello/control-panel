@@ -8,6 +8,7 @@ __group__ = "Status & Info"
 # Import from core business logic
 from core.config import load_config
 from core.service import get_service_port_status, get_service_status
+from core.services.ports import detect_service_ports
 
 
 # Create our own SERVICE_NAME completion to avoid circular imports
@@ -151,6 +152,157 @@ def _show_service_info(name):
             for pid, port in detected_ports.items():
                 marker = " (main)" if pid == main_pid else ""
                 click.echo(f"  PID {pid}: {port}{marker}")
+
+    # Always show detailed information for active services
+    if status_info == "active":
+        _show_detailed_info(name)
+
+
+def _show_detailed_info(name):
+    """Show comprehensive port and process information for a service"""
+    click.echo(f"\n{click.style('=== DETAILED ANALYSIS ===', bold=True, fg='cyan')}")
+
+    # Get raw detection data
+    try:
+        detection_result = detect_service_ports(name)
+        detected_ports = detection_result.get("detected_ports", {})
+        main_pid = detection_result.get("main_pid")
+        container_info = detection_result.get("container_info")
+
+        # Show service architecture
+        click.echo(f"\n{click.style('Service Architecture:', bold=True)}")
+
+        if container_info:
+            _show_container_details(container_info)
+        else:
+            _show_process_tree(detected_ports, main_pid)
+
+        # Show comprehensive port analysis
+        _show_port_analysis(detected_ports, main_pid, container_info)
+
+    except Exception as e:
+        click.echo(f"\n{click.style('Error getting detailed info:', fg='red')} {e}")
+
+
+def _show_container_details(container_info):
+    """Display container architecture information"""
+    runtime = container_info.get("runtime", "unknown")
+    container_id = container_info.get("container_id", "unknown")
+    container_name = container_info.get("container_name", "unknown")
+    network_mode = container_info.get("network_mode", "unknown")
+
+    click.echo(
+        f"  ├── {click.style('Container Runtime:', bold=True)} {runtime.title()}"
+    )
+    click.echo(
+        f"  ├── {click.style('Container ID:', bold=True)} {container_id[:12]}..."
+    )
+    click.echo(f"  ├── {click.style('Container Name:', bold=True)} {container_name}")
+    click.echo(f"  └── {click.style('Network Mode:', bold=True)} {network_mode}")
+
+    # Show port mappings
+    port_mappings = container_info.get("port_mappings", {})
+    if port_mappings:
+        click.echo(f"\n{click.style('Port Mappings:', bold=True)}")
+        for internal_port, external_port in port_mappings.items():
+            if network_mode == "host":
+                click.echo(f"  ├── {internal_port} → {external_port} (host network)")
+            else:
+                click.echo(f"  ├── Container {internal_port} → Host {external_port}")
+
+
+def _show_process_tree(detected_ports, main_pid):
+    """Display process hierarchy for non-containerized services"""
+    if not detected_ports:
+        click.echo("  └── No processes detected")
+        return
+
+    click.echo(f"  ├── {click.style('SystemD Service', bold=True)}")
+
+    if main_pid and main_pid in detected_ports:
+        port = detected_ports[main_pid]
+        click.echo(f"  │   └── Main Process (PID {main_pid}) → Port {port}")
+
+        # Show child processes
+        child_pids = [pid for pid in detected_ports.keys() if pid != main_pid]
+        if child_pids:
+            click.echo("  │")
+            for i, pid in enumerate(child_pids):
+                port = detected_ports[pid]
+                is_last = i == len(child_pids) - 1
+                connector = "└──" if is_last else "├──"
+                click.echo(f"  │   {connector} Child Process (PID {pid}) → Port {port}")
+    else:
+        # No main PID or main PID doesn't have port
+        for i, (pid, port) in enumerate(detected_ports.items()):
+            is_last = i == len(detected_ports) - 1
+            connector = "└──" if is_last else "├──"
+            click.echo(f"  {connector} Process (PID {pid}) → Port {port}")
+
+
+def _show_port_analysis(detected_ports, main_pid, container_info):
+    """Show detailed port analysis and selection logic"""
+    if not detected_ports and not container_info:
+        return
+
+    click.echo(f"\n{click.style('Port Selection Analysis:', bold=True)}")
+
+    if container_info:
+        external_ports = container_info.get("external_ports", [])
+        internal_ports = container_info.get("internal_ports", [])
+
+        if external_ports:
+            click.echo(f"  ├── Available External Ports: {', '.join(external_ports)}")
+            click.echo(f"  ├── Available Internal Ports: {', '.join(internal_ports)}")
+
+            # Show selection logic for containers
+            primary_port = external_ports[0] if external_ports else None
+            if primary_port:
+                click.echo(
+                    f"  └── {click.style('Primary Port Selected:', fg='green')} {primary_port} (first external port)"
+                )
+        else:
+            click.echo("  └── No external ports detected")
+    else:
+        # Process-based selection
+        if detected_ports:
+            all_ports = list(detected_ports.values())
+            click.echo(f"  ├── All Detected Ports: {', '.join(map(str, all_ports))}")
+
+            # Show selection priority
+            if main_pid and main_pid in detected_ports:
+                main_port = detected_ports[main_pid]
+                click.echo(
+                    f"  ├── {click.style('SystemD Main PID Port:', fg='yellow')} {main_port} (high priority)"
+                )
+
+            # Apply web heuristics to show reasoning
+            web_ports = [p for p in all_ports if _is_web_port(p)]
+            if web_ports:
+                click.echo(f"  ├── Web Ports Found: {', '.join(map(str, web_ports))}")
+                primary = min(web_ports)
+                click.echo(
+                    f"  └── {click.style('Primary Port Selected:', fg='green')} {primary} (web heuristic)"
+                )
+            else:
+                primary = min(all_ports)
+                click.echo(
+                    f"  └── {click.style('Primary Port Selected:', fg='green')} {primary} (lowest port)"
+                )
+
+
+def _is_web_port(port):
+    """Check if port is in common web ranges"""
+    web_ranges = [
+        (80, 80),
+        (443, 443),  # Standard HTTP/HTTPS
+        (3000, 3010),  # Development servers
+        (5000, 5010),  # Flask, etc.
+        (8000, 8090),  # Django, web servers
+        (11430, 11440),  # Ollama range
+    ]
+
+    return any(start <= port <= end for start, end in web_ranges)
 
 
 def _show_services_table(active_only=False):

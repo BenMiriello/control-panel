@@ -13,7 +13,7 @@ from core.service import (
     rename_service,
     unregister_service,
 )
-from core.services.ports import set_port_management_mode
+from core.services.ports import detect_service_ports, set_port_management_mode
 
 
 def register_service_routes(app):
@@ -346,3 +346,136 @@ def register_service_routes(app):
                 return jsonify({"success": False, "error": "No port detected"})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)})
+
+    @app.route("/api/services/<name>/port-details")
+    def api_port_details(name):
+        """API endpoint to get detailed port information for a service"""
+        try:
+            detection_result = detect_service_ports(name)
+            detected_ports = detection_result.get("detected_ports", {})
+            main_pid = detection_result.get("main_pid")
+            container_info = detection_result.get("container_info")
+
+            # Generate HTML for port details
+            html = _generate_port_details_html(detected_ports, main_pid, container_info)
+            return jsonify({"success": True, "html": html})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})
+
+
+def _generate_port_details_html(detected_ports, main_pid, container_info):
+    """Generate HTML for detailed port information"""
+    if not detected_ports and not container_info:
+        return '<span class="text-muted">No port information available</span>'
+
+    html_parts = []
+
+    # Container information
+    if container_info:
+        runtime = container_info.get("runtime", "unknown")
+        container_id = container_info.get("container_id", "unknown")
+        container_name = container_info.get("container_name", "unknown")
+        network_mode = container_info.get("network_mode", "unknown")
+
+        html_parts.append('<div class="mb-2">')
+        html_parts.append(f"<strong>Container:</strong> {runtime.title()}<br>")
+        html_parts.append(f"<strong>Name:</strong> {container_name}<br>")
+        html_parts.append(
+            f"<strong>ID:</strong> <code>{container_id[:12]}...</code><br>"
+        )
+        html_parts.append(f"<strong>Network:</strong> {network_mode}")
+        html_parts.append("</div>")
+
+        # Port mappings
+        port_mappings = container_info.get("port_mappings", {})
+        if port_mappings:
+            html_parts.append('<div class="mb-2">')
+            html_parts.append("<strong>Port Mappings:</strong><br>")
+            for internal_port, external_port in port_mappings.items():
+                if network_mode == "host":
+                    html_parts.append(
+                        f"<small>• {internal_port} → {external_port} (host network)</small><br>"
+                    )
+                else:
+                    html_parts.append(
+                        f"<small>• Container {internal_port} → Host {external_port}</small><br>"
+                    )
+            html_parts.append("</div>")
+
+    # Process information
+    if detected_ports:
+        html_parts.append('<div class="mb-2">')
+        html_parts.append("<strong>Process Details:</strong><br>")
+
+        if main_pid and main_pid in detected_ports:
+            port = detected_ports[main_pid]
+            html_parts.append(
+                f"<small>• Main Process (PID {main_pid}) → Port {port}</small><br>"
+            )
+
+            # Child processes
+            child_pids = [pid for pid in detected_ports.keys() if pid != main_pid]
+            for pid in child_pids:
+                port = detected_ports[pid]
+                html_parts.append(
+                    f"<small>• Child Process (PID {pid}) → Port {port}</small><br>"
+                )
+        else:
+            # No main PID or main PID doesn't have port
+            for pid, port in detected_ports.items():
+                html_parts.append(
+                    f"<small>• Process (PID {pid}) → Port {port}</small><br>"
+                )
+        html_parts.append("</div>")
+
+    # Port selection analysis
+    if detected_ports or container_info:
+        html_parts.append("<div>")
+        html_parts.append("<strong>Port Selection:</strong><br>")
+
+        if container_info:
+            external_ports = container_info.get("external_ports", [])
+            if external_ports:
+                primary_port = external_ports[0]
+                html_parts.append(
+                    f"<small>Primary: {primary_port} (first external port)</small>"
+                )
+            else:
+                html_parts.append("<small>No external ports available</small>")
+        else:
+            all_ports = list(detected_ports.values())
+            if main_pid and main_pid in detected_ports:
+                main_port = detected_ports[main_pid]
+                html_parts.append(
+                    f"<small>Primary: {main_port} (SystemD main process)</small>"
+                )
+            elif all_ports:
+                # Apply simple web heuristics
+                web_ports = [p for p in all_ports if _is_web_port_simple(p)]
+                if web_ports:
+                    primary = min(web_ports)
+                    html_parts.append(
+                        f"<small>Primary: {primary} (web port heuristic)</small>"
+                    )
+                else:
+                    primary = min(all_ports)
+                    html_parts.append(
+                        f"<small>Primary: {primary} (lowest port)</small>"
+                    )
+        html_parts.append("</div>")
+
+    return "".join(html_parts)
+
+
+def _is_web_port_simple(port):
+    """Simple web port detection for HTML generation"""
+    web_ranges = [
+        (80, 80),
+        (443, 443),  # Standard HTTP/HTTPS
+        (3000, 3010),  # Development servers
+        (5000, 5010),  # Flask, etc.
+        (8000, 8090),  # Django, web servers
+        (11430, 11440),  # Ollama range
+    ]
+
+    return any(start <= port <= end for start, end in web_ranges)

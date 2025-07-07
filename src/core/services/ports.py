@@ -8,19 +8,51 @@ from .lifecycle import get_service_status
 
 # Container Detection Functions
 
+# Runtime Detection Matrix - configurable container runtime support
+CONTAINER_RUNTIMES = {
+    "docker": {
+        "keywords": ["docker"],
+        "detect_func": "detect_docker_ports",
+        "version_cmd": ["docker", "--version"],
+        "description": "Docker containers",
+    },
+    "podman": {
+        "keywords": ["podman"],
+        "detect_func": "detect_podman_ports",
+        "version_cmd": ["podman", "--version"],
+        "description": "Podman containers",
+    },
+    "lxc": {
+        "keywords": ["lxc", "lxd"],
+        "detect_func": "detect_lxc_ports",
+        "version_cmd": ["lxc", "version"],
+        "description": "LXC/LXD system containers",
+    },
+    "systemd-nspawn": {
+        "keywords": ["systemd-nspawn", "machinectl"],
+        "detect_func": "detect_nspawn_ports",
+        "version_cmd": ["machinectl", "--version"],
+        "description": "systemd-nspawn containers",
+    },
+}
+
 
 def detect_container_service(service_name, command):
-    """Detect if service is containerized and get port info"""
+    """Detect if service is containerized and get port info using runtime matrix"""
     if not command:
         return None
 
     command_lower = command.lower()
 
-    # Check for container runtimes in command
-    if "docker" in command_lower:
-        return detect_docker_ports(service_name)
-    elif "podman" in command_lower:
-        return detect_podman_ports(service_name)
+    # Check for container runtimes in command using the runtime matrix
+    for runtime_name, runtime_config in CONTAINER_RUNTIMES.items():
+        keywords = runtime_config["keywords"]
+        if any(keyword in command_lower for keyword in keywords):
+            # Found matching runtime, call its detection function
+            detect_func_name = runtime_config["detect_func"]
+            detect_func = globals().get(detect_func_name)
+            if detect_func:
+                return detect_func(service_name)
 
     # Check if command is a script file that might contain container commands
     if command.endswith(".sh") or "/scripts/" in command:
@@ -30,16 +62,56 @@ def detect_container_service(service_name, command):
             with open(script_path) as f:
                 script_content = f.read().lower()
 
-            if "docker" in script_content:
-                return detect_docker_ports(service_name)
-            elif "podman" in script_content:
-                return detect_podman_ports(service_name)
+            # Check script content against runtime matrix
+            for runtime_name, runtime_config in CONTAINER_RUNTIMES.items():
+                keywords = runtime_config["keywords"]
+                if any(keyword in script_content for keyword in keywords):
+                    detect_func_name = runtime_config["detect_func"]
+                    detect_func = globals().get(detect_func_name)
+                    if detect_func:
+                        return detect_func(service_name)
 
         except (OSError, FileNotFoundError, PermissionError):
             # Script not readable, fallback to direct container detection
             pass
 
     return None
+
+
+def get_available_runtimes():
+    """Get list of available container runtimes on the system"""
+    available = {}
+
+    for runtime_name, runtime_config in CONTAINER_RUNTIMES.items():
+        version_cmd = runtime_config["version_cmd"]
+        try:
+            result = subprocess.run(version_cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                # Extract version from output if possible
+                version_output = (
+                    result.stdout.strip().split("\n")[0]
+                    if result.stdout.strip()
+                    else "Available"
+                )
+                available[runtime_name] = {
+                    "available": True,
+                    "version": version_output,
+                    "description": runtime_config["description"],
+                }
+            else:
+                available[runtime_name] = {
+                    "available": False,
+                    "version": None,
+                    "description": runtime_config["description"],
+                }
+        except (subprocess.SubprocessError, FileNotFoundError):
+            available[runtime_name] = {
+                "available": False,
+                "version": None,
+                "description": runtime_config["description"],
+            }
+
+    return available
 
 
 def detect_docker_ports(service_name):
@@ -242,6 +314,215 @@ def detect_podman_ports(service_name):
             "container_id": container_id,
             "container_name": container_name,
             "network_mode": network_mode,
+            "port_mappings": port_mappings,
+            "internal_ports": internal_ports,
+            "external_ports": external_ports,
+        }
+
+    except Exception:
+        return None
+
+
+def detect_lxc_ports(service_name):
+    """Get LXC/LXD container ports for service"""
+    try:
+        # Check if lxc command is available
+        result = subprocess.run(["lxc", "version"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+
+        # Get running containers
+        result = subprocess.run(
+            ["lxc", "list", "--format", "json"], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return None
+
+        containers = json.loads(result.stdout)
+
+        # Find container by name pattern
+        target_container = None
+        for container in containers:
+            name = container.get("name", "")
+            if service_name in name or name.replace("-", "_") == service_name.replace(
+                "-", "_"
+            ):
+                target_container = container
+                break
+
+        if not target_container:
+            return None
+
+        container_name = target_container["name"]
+        container_status = target_container.get("status", "")
+
+        if container_status != "Running":
+            return None
+
+        # Get container configuration for port information
+        config_result = subprocess.run(
+            ["lxc", "config", "show", container_name], capture_output=True, text=True
+        )
+
+        port_mappings = {}
+        internal_ports = []
+        external_ports = []
+
+        if config_result.returncode == 0:
+            # Parse YAML-like config for proxy devices (port forwards)
+            config_lines = config_result.stdout.split("\n")
+            in_devices = False
+            current_device = None
+
+            for line in config_lines:
+                line = line.strip()
+                if line == "devices:":
+                    in_devices = True
+                    continue
+                elif in_devices and line and not line.startswith(" "):
+                    in_devices = False
+
+                if in_devices and line.startswith(" ") and ":" in line:
+                    if line.strip().endswith(":"):
+                        # Device name
+                        current_device = line.strip().rstrip(":")
+                    elif "type: proxy" in line:
+                        # This is a proxy device (port forward)
+                        pass
+                    elif current_device and ("listen:" in line or "connect:" in line):
+                        # Extract port information from proxy device
+                        if "listen:" in line:
+                            listen_part = line.split("listen:")[-1].strip()
+                            if ":" in listen_part:
+                                external_port = listen_part.split(":")[-1]
+                                external_ports.append(external_port)
+                        elif "connect:" in line:
+                            connect_part = line.split("connect:")[-1].strip()
+                            if ":" in connect_part:
+                                internal_port = connect_part.split(":")[-1]
+                                internal_ports.append(internal_port)
+
+        # If no explicit port forwards found, try to detect from network interfaces
+        if not external_ports:
+            # Get network info from container
+            net_result = subprocess.run(
+                ["lxc", "exec", container_name, "--", "ss", "-tlnp"],
+                capture_output=True,
+                text=True,
+            )
+            if net_result.returncode == 0:
+                # Parse listening ports from inside container
+                for line in net_result.stdout.split("\n"):
+                    if "LISTEN" in line and "::" not in line:  # Skip IPv6
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            addr_port = parts[3]
+                            if ":" in addr_port:
+                                port = addr_port.split(":")[-1]
+                                if port.isdigit():
+                                    internal_ports.append(port)
+                                    # For containers without explicit forwards,
+                                    # assume internal = external (bridged network)
+                                    external_ports.append(port)
+
+        # Create port mappings
+        for i, internal_port in enumerate(internal_ports):
+            external_port = (
+                external_ports[i] if i < len(external_ports) else internal_port
+            )
+            port_mappings[f"{internal_port}/tcp"] = external_port
+
+        return {
+            "runtime": "lxc",
+            "container_id": container_name,  # LXC uses names as IDs
+            "container_name": container_name,
+            "network_mode": "bridge",  # LXC typically uses bridged networking
+            "port_mappings": port_mappings,
+            "internal_ports": internal_ports,
+            "external_ports": external_ports,
+        }
+
+    except Exception:
+        return None
+
+
+def detect_nspawn_ports(service_name):
+    """Get systemd-nspawn container ports for service"""
+    try:
+        # Check if machinectl command is available
+        result = subprocess.run(
+            ["machinectl", "--version"], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return None
+
+        # Get running containers/machines
+        result = subprocess.run(["machinectl", "list"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+
+        # Parse machine list to find matching container
+        target_machine = None
+        for line in result.stdout.split("\n")[1:]:  # Skip header
+            if line.strip():
+                parts = line.split()
+                if len(parts) >= 1:
+                    machine_name = parts[0]
+                    if service_name in machine_name or machine_name.replace(
+                        "-", "_"
+                    ) == service_name.replace("-", "_"):
+                        target_machine = machine_name
+                        break
+
+        if not target_machine:
+            return None
+
+        # Get machine status
+        status_result = subprocess.run(
+            ["machinectl", "status", target_machine], capture_output=True, text=True
+        )
+
+        if status_result.returncode != 0:
+            return None
+
+        # systemd-nspawn typically shares the host network or uses simple port forwards
+        # Try to get network namespace info
+        internal_ports = []
+        external_ports = []
+        port_mappings = {}
+
+        # Check if the machine has its own network namespace
+        # Get processes in the machine to find listening ports
+        exec_result = subprocess.run(
+            ["machinectl", "shell", target_machine, "--", "ss", "-tlnp"],
+            capture_output=True,
+            text=True,
+        )
+
+        if exec_result.returncode == 0:
+            # Parse listening ports from inside container
+            for line in exec_result.stdout.split("\n"):
+                if "LISTEN" in line and "::" not in line:  # Skip IPv6
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        addr_port = parts[3]
+                        if ":" in addr_port:
+                            port = addr_port.split(":")[-1]
+                            if port.isdigit() and port not in internal_ports:
+                                internal_ports.append(port)
+                                # systemd-nspawn often shares host network
+                                # or uses simple port forwarding
+                                external_ports.append(port)
+
+        # Create port mappings (often 1:1 for nspawn)
+        for port in internal_ports:
+            port_mappings[f"{port}/tcp"] = port
+
+        return {
+            "runtime": "systemd-nspawn",
+            "container_id": target_machine,
+            "container_name": target_machine,
+            "network_mode": "shared",  # Often shares host network
             "port_mappings": port_mappings,
             "internal_ports": internal_ports,
             "external_ports": external_ports,

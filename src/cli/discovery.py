@@ -46,6 +46,9 @@ def discover_commands(commands_dir):
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
                 if isinstance(attr, click.Command):
+                    # Skip hidden commands from help and completion
+                    if getattr(attr, "hidden", False):
+                        continue
                     # Get example usage
                     example = getattr(attr, "__example__", _default_example(attr.name))
                     groups[group_name].append((attr.name, attr, example))
@@ -172,6 +175,34 @@ class GroupedMultiCommand(click.MultiCommand):
             for cmd_name, cmd_obj, example in group_commands:
                 if cmd_name == name:
                     return cmd_obj
+
+        # Also check for hidden commands (not in command_groups but still executable)
+        return self._get_hidden_command(name)
+
+    def _get_hidden_command(self, name):
+        """Get a hidden command by name"""
+        commands_dir_path = Path(self.commands_dir)
+        if not commands_dir_path.exists():
+            return None
+
+        # Scan all Python files in commands directory
+        for cmd_file in commands_dir_path.glob("*.py"):
+            if cmd_file.stem.startswith("__"):
+                continue
+
+            module_name = f"cli.commands.{cmd_file.stem}"
+            try:
+                module = importlib.import_module(module_name)
+
+                # Find all click commands in the module, including hidden ones
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if isinstance(attr, click.Command) and attr.name == name:
+                        return attr
+
+            except ImportError:
+                continue
+
         return None
 
     def format_commands(self, ctx, formatter):

@@ -84,6 +84,10 @@ def s(name, active):
     ps.callback(name, active)
 
 
+# Mark the 's' command as hidden from help and completion
+s.hidden = True
+
+
 @click.command()
 @click.argument("name", type=SERVICE_NAME)
 def info(name):

@@ -12,7 +12,68 @@ from core.service import control_service, register_service
 from ..completion import PORT_RANGE, SERVICE_NAME, SMART_PORT
 
 
-@click.command()
+# Custom command classes to add shortcuts with proper formatting
+class RegisterCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: reg")
+                break
+        return "\n".join(lines)
+
+
+class EditCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: e")
+                break
+        return "\n".join(lines)
+
+
+class StartCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: st")
+                break
+        return "\n".join(lines)
+
+
+class RestartCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: rs")
+                break
+        return "\n".join(lines)
+
+
+class StopCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: x")
+                break
+        return "\n".join(lines)
+
+
+@click.command(cls=RegisterCommand)
 @click.option("--name", required=True, help="Service name")
 @click.option("--command", required=True, help="Command to start the service")
 @click.option(
@@ -97,7 +158,7 @@ def register(
         click.echo(f"To enable auto-start: panel auto {name}")
 
 
-@click.command()
+@click.command(cls=EditCommand)
 @click.argument("name", type=SERVICE_NAME)
 @click.option("--command", help="New command to start the service")
 @click.option("--port", type=int, help="New port number")
@@ -191,7 +252,7 @@ def edit(name, command, port, path, env_add, env_remove, detect_port):
         click.echo("No changes made")
 
 
-@click.command()
+@click.command(cls=StartCommand)
 @click.argument("name", type=SERVICE_NAME)
 def start(name):
     """Start a service"""
@@ -213,7 +274,7 @@ def start(name):
     )
 
 
-@click.command()
+@click.command(cls=StopCommand)
 @click.option(
     "--force", is_flag=True, help="Force kill processes using the service port"
 )
@@ -257,7 +318,7 @@ def stop(name, force):
     )
 
 
-@click.command()
+@click.command(cls=RestartCommand)
 @click.argument("name", type=SERVICE_NAME)
 def restart(name):
     """Restart a service"""

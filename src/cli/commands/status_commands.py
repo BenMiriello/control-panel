@@ -34,6 +34,31 @@ class CompleteServiceNames(click.ParamType):
 SERVICE_NAME = CompleteServiceNames()
 
 
+# Custom command classes to add shortcuts with proper formatting
+class InfoCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: i")
+                break
+        return "\n".join(lines)
+
+
+class StatusCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: s")
+                break
+        return "\n".join(lines)
+
+
 def shorten_command(command, max_length=50):
     """Shorten command display for list view"""
     if len(command) <= max_length:
@@ -66,7 +91,7 @@ def ps(name, active):
         _show_services_table(active_only=active)
 
 
-@click.command("status")
+@click.command("status", cls=StatusCommand)
 @click.argument("name", type=SERVICE_NAME, required=False)
 @click.option("--active", "-a", is_flag=True, help="Show only active/running services")
 def status(name, active):
@@ -88,7 +113,7 @@ def s(name, active):
 s.hidden = True
 
 
-@click.command()
+@click.command(cls=InfoCommand)
 @click.argument("name", type=SERVICE_NAME)
 def info(name):
     """Show detailed service information"""

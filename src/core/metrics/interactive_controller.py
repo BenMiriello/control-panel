@@ -3,6 +3,7 @@
 import sys
 import threading
 import time
+from typing import Dict, List
 
 from rich.console import Console
 
@@ -23,10 +24,13 @@ class InteractiveController:
         self.console = Console()
 
         # Data storage
-        self.system_metrics = {}
-        self.previous_system_metrics = {}
-        self.service_metrics = []
-        self.hardware_info = {}
+        self.system_metrics: Dict = {}
+        self.previous_system_metrics: Dict = {}
+        self.service_metrics: List[Dict] = []
+        self.hardware_info: Dict = {}
+
+        # Navigation state
+        self.expanded_services: set = set()  # Track which services are expanded
 
         # Threading
         self.data_thread = None
@@ -82,16 +86,28 @@ class InteractiveController:
                 self.selected_index = max(
                     0, min(new_index, len(self.service_metrics) - 1)
                 )
+                # Don't auto-collapse when just navigating - only when expanding another
 
     def _expand_service(self):
-        """Expand service details (placeholder)"""
-        # TODO: Implement service expansion
-        pass
+        """Expand service details (close others)"""
+        if not self.service_metrics or self.selected_index >= len(self.service_metrics):
+            return
+
+        selected_service = self.service_metrics[self.selected_index]
+        service_name = selected_service["service_name"]
+
+        # Clear all expanded services and expand only the selected one
+        self.expanded_services.clear()
+        self.expanded_services.add(service_name)
 
     def _collapse_service(self):
-        """Collapse service details (placeholder)"""
-        # TODO: Implement service collapse
-        pass
+        """Collapse service details"""
+        if not self.service_metrics or self.selected_index >= len(self.service_metrics):
+            return
+
+        selected_service = self.service_metrics[self.selected_index]
+        service_name = selected_service["service_name"]
+        self.expanded_services.discard(service_name)
 
     def _show_service_actions(self):
         """Show quick actions menu for selected service (placeholder for blessed implementation)"""
@@ -197,6 +213,7 @@ class InteractiveController:
                                 self.selected_index,
                                 self.previous_system_metrics,
                                 terminal_height=term.height,
+                                expanded_services=self.expanded_services,
                             )
 
                         # Render Rich content to string
@@ -225,9 +242,10 @@ class InteractiveController:
                                 term.move_xy(0, i) + term.clear_eol, end="", flush=True
                             )
 
-                        # Handle keyboard input (non-blocking)
-                        key = term.inkey(timeout=1.0)
+                        # Use proper blessed input handling (non-blocking, no double calls)
+                        key = term.inkey(timeout=0)  # Non-blocking
                         if key:
+                            # Process input immediately
                             if key.lower() == "q" or key.code == term.KEY_ESCAPE:
                                 self.running = False
                                 break
@@ -241,6 +259,9 @@ class InteractiveController:
                                 self._collapse_service()
                             elif key.code == term.KEY_ENTER:
                                 self._show_service_actions()
+
+                        # Fast refresh rate for responsiveness (no sleeping after input)
+                        time.sleep(0.02)  # 50Hz refresh rate
 
                     except Exception as e:
                         print(term.clear + term.home, end="", flush=True)

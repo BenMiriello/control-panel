@@ -51,38 +51,44 @@ def _detect_cpu_arch() -> str:
 def detect_memory_info() -> Dict:
     """Detect memory type and configuration"""
     try:
-        # Try to get memory info from dmidecode (requires root)
+        # Try to get memory info without requiring root privileges
+        # Most monitoring tools avoid dmidecode to prevent sudo requirements
         try:
+            # Try lshw first (often available without root for basic info)
             result = subprocess.run(
-                ["sudo", "dmidecode", "-t", "memory"],
+                ["lshw", "-c", "memory", "-short"],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            if result.returncode == 0:
+            if result.returncode == 0 and "memory" in result.stdout.lower():
+                # Basic detection from lshw output
                 output = result.stdout
-
-                # Extract memory type (DDR4, DDR5, etc.)
-                type_match = re.search(r"Type:\s*(DDR\d+)", output)
-                memory_type = type_match.group(1) if type_match else None
-
-                # Extract speed
-                speed_match = re.search(r"Speed:\s*(\d+)\s*MT/s", output)
-                speed = f"{speed_match.group(1)}MHz" if speed_match else None
-
-                if memory_type:
-                    return {
-                        "type": memory_type,
-                        "speed": speed,
-                        "detection_method": "dmidecode",
-                    }
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                if "DDR4" in output:
+                    return {"type": "DDR4", "speed": None, "detection_method": "lshw"}
+                elif "DDR5" in output:
+                    return {"type": "DDR5", "speed": None, "detection_method": "lshw"}
+                elif "DDR3" in output:
+                    return {"type": "DDR3", "speed": None, "detection_method": "lshw"}
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+        ):
             pass
 
         # Fallback: basic detection from /proc/meminfo
-        # Note: Could parse meminfo here for more detailed RAM info if needed
+        # This doesn't give us DDR type but avoids any root requirements
+        try:
+            with open("/proc/meminfo") as f:
+                meminfo = f.read()
+                # Just confirm we have memory info available
+                if "MemTotal" in meminfo:
+                    return {"type": "RAM", "speed": None, "detection_method": "proc"}
+        except OSError:
+            pass
 
-        return {"type": "RAM", "speed": None, "detection_method": "proc"}
+        return {"type": "Unknown", "speed": None, "detection_method": "none"}
     except OSError:
         return {"type": "Unknown", "speed": None, "detection_method": "none"}
 

@@ -32,7 +32,7 @@ class MetricsFormatter:
                     return f"{bytes_value}{unit}"
                 else:
                     return f"{bytes_value:.1f}{unit}"
-            bytes_value /= 1024
+            bytes_value = int(bytes_value / 1024)
         return f"{bytes_value:.1f}P"
 
     def format_uptime(self, seconds: float) -> str:
@@ -89,7 +89,7 @@ class MetricsFormatter:
             cpu_info = f"   {cpu_cores} cores ({cpu_model})"
 
         lines.append(
-            f"CPU:     {cpu_usage:5.1f}% {cpu_bar} [{cpu_color}]{cpu_trend}[/] {cpu_usage:4.1f}%{cpu_info}"
+            f"CPU:     {cpu_usage:5.1f}% {cpu_bar} [{cpu_color}]{cpu_trend}[/] {cpu_info}"
         )
 
         # Memory
@@ -110,7 +110,7 @@ class MetricsFormatter:
                 memory_type = f" {mem_info['type']}"
 
         lines.append(
-            f"Memory:  {memory_percent:5.1f}% {memory_bar} [{memory_color}]{memory_trend}[/] {memory_percent:4.1f}%   {memory_used}/{memory_total}{memory_type}"
+            f"Memory:  {memory_percent:5.1f}% {memory_bar} [{memory_color}]{memory_trend}[/]   {memory_used}/{memory_total}{memory_type}"
         )
 
         # GPU (if available)
@@ -126,7 +126,7 @@ class MetricsFormatter:
                 gpu_name = f"   {self.hardware_info['gpu']['gpus'][0]['name']}"
 
             lines.append(
-                f"GPU:     {gpu_util:5.1f}% {gpu_bar} [{gpu_trend_color}]{gpu_trend}[/] {gpu_util:4.1f}%{gpu_name}"
+                f"GPU:     {gpu_util:5.1f}% {gpu_bar} [{gpu_trend_color}]{gpu_trend}[/] {gpu_name}"
             )
 
             # VRAM
@@ -141,7 +141,7 @@ class MetricsFormatter:
             gpu_mem_total_str = self.format_bytes(gpu_mem_total)
 
             lines.append(
-                f"VRAM:    {gpu_mem_percent:5.1f}% {vram_bar} [{gpu_trend_color}]{gpu_trend}[/] {gpu_mem_percent:4.1f}%   {gpu_mem_used_str}/{gpu_mem_total_str}"
+                f"VRAM:    {gpu_mem_percent:5.1f}% {vram_bar} [{gpu_trend_color}]{gpu_trend}[/]   {gpu_mem_used_str}/{gpu_mem_total_str}"
             )
 
         # Disk
@@ -160,7 +160,7 @@ class MetricsFormatter:
             storage_type = f" {self.hardware_info['storage']['type']}"
 
         lines.append(
-            f"Disk:    {disk_percent:5.1f}% {disk_bar} [{disk_color}]{disk_trend}[/] {disk_percent:4.1f}%   {disk_used}/{disk_total}{storage_type}"
+            f"Disk:    {disk_percent:5.1f}% {disk_bar} [{disk_color}]{disk_trend}[/]   {disk_used}/{disk_total}{storage_type}"
         )
 
         # Temperature (if available)
@@ -199,24 +199,40 @@ class MetricsFormatter:
         return Panel(content, title="System Metrics (Live)", border_style="blue")
 
     def create_services_table(
-        self, service_metrics: List[Dict], selected_index: int = 0
+        self,
+        service_metrics: List[Dict],
+        selected_index: int = 0,
+        expanded_services: set = None,
     ) -> Panel:
-        """Create the services table panel"""
-        table = Table(show_header=True, header_style="bold blue")
-        table.add_column("Service", style="white", width=25)
-        table.add_column("CPU", justify="right", width=6)
-        table.add_column("RAM", justify="right", width=6)
-        table.add_column("GPU", justify="right", width=5)
-        table.add_column("VRAM", justify="right", width=7)
-        table.add_column("Status", width=15)
+        """Create the services table with proper expanded view layout"""
+        if expanded_services is None:
+            expanded_services = set()
+
+        content_lines = []
+
+        # Create header
+        content_lines.append(
+            "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓"
+        )
+        content_lines.append(
+            "┃ Service                   ┃    CPU ┃    RAM ┃     GPU ┃    VRAM ┃ Status          ┃"
+        )
+        content_lines.append(
+            "┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩"
+        )
 
         total_services = len(service_metrics)
         running_services = sum(1 for s in service_metrics if s["status"] == "active")
 
         for i, service in enumerate(service_metrics):
-            # Selection indicator
-            indicator = "●" if i == selected_index else " "
-            service_name = f"{indicator} {service['service_name']}"
+            # Selection indicator and expansion indicator
+            selection_indicator = "●" if i == selected_index else " "
+            expansion_indicator = (
+                "▼" if service["service_name"] in expanded_services else "▶"
+            )
+            service_name = (
+                f"{selection_indicator} {expansion_indicator} {service['service_name']}"
+            )
             if service.get("port"):
                 service_name += f":{service['port']}"
 
@@ -234,11 +250,12 @@ class MetricsFormatter:
                 else "--"
             )
 
-            # GPU metrics - show percentage of system GPU usage (estimated)
+            # GPU metrics
             gpu_vram_mb = metrics.get("gpu_vram_mb", 0)
+            gpu_util_percent = metrics.get("gpu_util_percent", 0)
+
             if gpu_vram_mb > 0:
-                # For GPU utilization, we can't easily get per-process GPU %, so show active indicator
-                gpu_str = "CUDA"  # Indicates CUDA/GPU usage
+                gpu_str = f"{gpu_util_percent:.1f}%"
                 vram_str = self.format_bytes(gpu_vram_mb * 1024 * 1024)
             else:
                 gpu_str = "--"
@@ -248,33 +265,190 @@ class MetricsFormatter:
             if service["status"] == "active":
                 uptime_str = self.format_uptime(metrics["uptime_seconds"])
                 status = f"Running {uptime_str}"
-                status_style = "green"
             else:
                 status = "Inactive"
-                status_style = "dim"
 
-            # Add row with conditional styling
+            # Create service row with proper formatting
+            service_row = f"│ {service_name:<25} │ {cpu_str:>6} │ {memory_str:>6} │ {gpu_str:>7} │ {vram_str:>7} │ {status:<15} │"
+
             if i == selected_index:
-                table.add_row(
-                    f"[bold green]{service_name}[/]",
-                    f"[bold]{cpu_str}[/]",
-                    f"[bold]{memory_str}[/]",
-                    f"[bold]{gpu_str}[/]",
-                    f"[bold]{vram_str}[/]",
-                    f"[bold {status_style}]{status}[/]",
-                )
+                content_lines.append(f"[bold green]{service_row}[/]")
             else:
-                table.add_row(
-                    service_name,
-                    cpu_str,
-                    memory_str,
-                    gpu_str,
-                    vram_str,
-                    f"[{status_style}]{status}[/]",
+                content_lines.append(service_row)
+
+            # Add expanded details as separate full-width panel
+            if service["service_name"] in expanded_services:
+                content_lines.extend(
+                    self._create_detailed_metrics_panel(service, i == selected_index)
                 )
+
+        # Close table
+        content_lines.append(
+            "└───────────────────────────┴────────┴────────┴─────────┴─────────┴─────────────────┘"
+        )
+
+        # Join all content
+        content = "\n".join(content_lines)
 
         title = f"Services ({total_services} total, {running_services} running)"
-        return Panel(table, title=title, border_style="blue")
+        return Panel(content, title=title, border_style="blue")
+
+    def _create_detailed_metrics_panel(
+        self, service: Dict, is_selected: bool
+    ) -> List[str]:
+        """Create detailed metrics panel in nested box format matching roadmap specification"""
+        metrics = service["metrics"]
+        pids = service.get("pids", [])
+
+        # Style for detail rows
+        detail_style = "[dim cyan]" if is_selected else "[dim]"
+        end_style = "[/]"
+
+        lines = []
+
+        # Create nested detail box with proper indentation
+        lines.append(
+            "│ │ ├───────────────────────────────────────────────────────────────────────────────╮ │"
+        )
+
+        # CPU Usage detail with progress bar and PID info
+        cpu_percent = metrics.get("cpu_percent", 0)
+        cpu_bar = self.create_progress_bar(cpu_percent, width=12)
+        main_pid = pids[0] if pids else "N/A"
+        threads = metrics.get("num_threads", 0)
+        lines.append(
+            f"│ │ │ {detail_style}CPU Usage:    {cpu_bar} {cpu_percent:5.1f}%  (PID: {main_pid}, Threads: {threads}){end_style}                 │ │"
+        )
+
+        # Memory detail with RSS info
+        memory_mb = metrics.get("memory_mb", 0)
+        memory_bytes = int(memory_mb * 1024 * 1024)
+        memory_str = self.format_bytes(memory_bytes)
+        lines.append(
+            f"│ │ │ {detail_style}Memory:       {memory_str:>8}  (RSS: {memory_str}){end_style}                                          │ │"
+        )
+
+        # GPU detail if available
+        gpu_vram_mb = metrics.get("gpu_vram_mb", 0)
+        gpu_util_percent = metrics.get("gpu_util_percent", 0)
+        if gpu_vram_mb > 0:
+            gpu_bar = self.create_progress_bar(gpu_util_percent, width=12)
+            vram_str = self.format_bytes(gpu_vram_mb * 1024 * 1024)
+            lines.append(
+                f"│ │ │ {detail_style}GPU Usage:    {gpu_bar} {gpu_util_percent:5.1f}%  (VRAM: {vram_str}){end_style}                     │ │"
+            )
+
+        # Network detail
+        connections = metrics.get("connections", 0)
+        lines.append(
+            f"│ │ │ {detail_style}Network:      ↑--KB/s ↓--KB/s  (Connections: {connections}){end_style}                               │ │"
+        )
+
+        # Disk I/O detail
+        io_read_mb = metrics.get("io_read_mb", 0)
+        io_write_mb = metrics.get("io_write_mb", 0)
+        io_read_str = self.format_bytes(int(io_read_mb * 1024 * 1024))
+        io_write_str = self.format_bytes(int(io_write_mb * 1024 * 1024))
+        lines.append(
+            f"│ │ │ {detail_style}Disk I/O:     Read: {io_read_str:>6}/s  Write: {io_write_str:>6}/s{end_style}                                 │ │"
+        )
+
+        # Process uptime
+        uptime_seconds = metrics.get("uptime_seconds", 0)
+        uptime_str = self.format_uptime(uptime_seconds)
+        lines.append(
+            f"│ │ │ {detail_style}Uptime:       {uptime_str}{end_style}                                                            │ │"
+        )
+
+        # Close nested detail box
+        lines.append(
+            "│ │ ╰───────────────────────────────────────────────────────────────────────────────╯ │"
+        )
+
+        return lines
+
+    def _add_service_details(self, table: Table, service: Dict, is_selected: bool):
+        """Add expanded details for a service in roadmap format"""
+        metrics = service["metrics"]
+        pids = service.get("pids", [])
+
+        # Style for detail rows
+        detail_style = "[dim cyan]" if is_selected else "[dim]"
+        end_style = "[/]"
+
+        # Create detail box header
+        table.add_row(
+            f"{detail_style}│ ┌─ Detailed Metrics ─────────────────────────────────────────┐{end_style}",
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
+
+        # CPU Usage detail with progress bar and PID info
+        cpu_percent = metrics.get("cpu_percent", 0)
+        cpu_bar = self.create_progress_bar(cpu_percent, width=8)
+        main_pid = pids[0] if pids else "N/A"
+        threads = metrics.get("num_threads", 0)
+        table.add_row(
+            f"{detail_style}│ │ CPU Usage: {cpu_bar} {cpu_percent:.1f}% (PID: {main_pid}, Threads: {threads}){end_style}",
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
+
+        # Memory detail with RSS info
+        memory_mb = metrics.get("memory_mb", 0)
+        memory_bytes = int(memory_mb * 1024 * 1024)
+        memory_percent = (memory_mb / (64 * 1024)) * 100  # Rough estimate for bar
+        memory_bar = self.create_progress_bar(min(memory_percent, 100), width=8)
+        memory_str = self.format_bytes(memory_bytes)
+        table.add_row(
+            f"{detail_style}│ │ Memory:    {memory_bar} {memory_str} (RSS: {memory_str}){end_style}",
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
+
+        # Network detail
+        connections = metrics.get("connections", 0)
+        table.add_row(
+            f"{detail_style}│ │ Network:   ↑--KB/s ↓--KB/s (Connections: {connections}){end_style}",
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
+
+        # Disk I/O detail
+        io_read_mb = metrics.get("io_read_mb", 0)
+        io_write_mb = metrics.get("io_write_mb", 0)
+        io_read_str = self.format_bytes(int(io_read_mb * 1024 * 1024))
+        io_write_str = self.format_bytes(int(io_write_mb * 1024 * 1024))
+        table.add_row(
+            f"{detail_style}│ │ Disk I/O:  Read: {io_read_str}/s Write: {io_write_str}/s{end_style}",
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
+
+        # Close detail box
+        table.add_row(
+            f"{detail_style}│ └────────────────────────────────────────────────────────────┘{end_style}",
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
 
     def create_help_text(self) -> Text:
         """Create help text for controls"""
@@ -296,6 +470,7 @@ class MetricsFormatter:
         selected_index: int = 0,
         previous_system_metrics: Dict = None,
         terminal_height: int = None,
+        expanded_services: set = None,
     ) -> Layout:
         """Create the main layout with vertical centering and dynamic sizing"""
         layout = Layout()
@@ -315,10 +490,27 @@ class MetricsFormatter:
         system_height = base_lines + gpu_lines + temp_lines + border_lines
         help_height = 1  # Fixed height for help text
 
-        # Dynamic services height: header(3) + services + borders(2) + bottom line(1)
+        # Dynamic services height: header(3) + services + expanded details + borders(2) + bottom line(1)
+        if expanded_services is None:
+            expanded_services = set()
+
+        expanded_count = sum(
+            1 for s in service_metrics if s["service_name"] in expanded_services
+        )
+        # Calculate lines per expanded service: top border + CPU + Memory + GPU (if available) + Network + Disk I/O + Uptime + bottom border
+        lines_per_service = 7  # Base: top border + CPU + Memory + Network + Disk I/O + Uptime + bottom border
+        # Add 1 more line for GPU if any service has GPU usage
+        if any(
+            s.get("metrics", {}).get("gpu_vram_mb", 0) > 0
+            for s in service_metrics
+            if s["service_name"] in expanded_services
+        ):
+            lines_per_service += 1
+        expanded_detail_lines = expanded_count * lines_per_service
+
         services_content_height = (
-            len(service_metrics) + 6
-        )  # 3 for header, 2 for borders, 1 for bottom
+            len(service_metrics) + expanded_detail_lines + 6
+        )  # base services + expansion details + header + borders
 
         # Calculate total content height
         total_content_height = system_height + services_content_height + help_height
@@ -353,7 +545,9 @@ class MetricsFormatter:
             self.create_system_panel(system_metrics, previous_system_metrics)
         )
         layout["services"].update(
-            self.create_services_table(service_metrics, selected_index)
+            self.create_services_table(
+                service_metrics, selected_index, expanded_services
+            )
         )
         layout["help"].update(self.create_help_text())
 

@@ -6,6 +6,7 @@ import click
 __group__ = "Monitoring"
 
 from core.metrics.interactive_controller import InteractiveController
+from core.metrics.textual_app import run_metrics_dashboard
 
 
 @click.command()
@@ -51,13 +52,19 @@ def metrics(live, simple, json_output, interval, debug):
         )
         controller.console.print(layout)
     else:
-        # Interactive live dashboard
+        # Interactive live dashboard using Textual
         try:
-            controller.run_interactive()
+            run_metrics_dashboard(refresh_interval=interval)
         except Exception as e:
-            controller.console.print(f"[red]Interactive mode failed: {e}[/]")
-            controller.console.print("[yellow]Falling back to simple mode...[/]")
-            controller.run_simple(json_output=False)
+            # Fallback to Rich+blessed implementation
+            print(f"Textual dashboard failed: {e}")
+            print("Falling back to Rich implementation...")
+            try:
+                controller.run_interactive()
+            except Exception as e2:
+                controller.console.print(f"[red]Interactive mode failed: {e2}[/]")
+                controller.console.print("[yellow]Falling back to simple mode...[/]")
+                controller.run_simple(json_output=False)
 
 
 # Custom command class for proper help formatting

@@ -10,11 +10,41 @@ from ..config import load_config
 
 
 def get_gpu_usage_by_pid() -> Dict[int, Dict]:
-    """Get GPU usage by PID using nvidia-smi"""
+    """Get GPU usage by PID using pynvml for real utilization data"""
     gpu_usage = {}
 
     try:
-        # Query GPU processes using nvidia-smi
+        # First try pynvml for real GPU utilization percentages
+        import pynvml
+
+        pynvml.nvmlInit()
+
+        device_count = pynvml.nvmlDeviceGetCount()
+        for device_idx in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(device_idx)
+
+            # Get process utilization (GPU % usage per process)
+            try:
+                processes = pynvml.nvmlDeviceGetProcessUtilization(handle, 0)
+                for proc in processes:
+                    if hasattr(proc, "pid"):
+                        pid = proc.pid
+                        gpu_usage[pid] = {
+                            "gpu_util_percent": proc.smUtil,  # GPU compute utilization %
+                            "gpu_mem_percent": proc.memUtil,  # GPU memory utilization %
+                            "vram_mb": 0,  # Will be filled from nvidia-smi below
+                            "gpu_uuid": None,
+                        }
+            except (AttributeError, pynvml.NVMLError):
+                # nvmlDeviceGetProcessUtilization not available or no data
+                pass
+
+    except (ImportError, Exception) as e:
+        # pynvml not available, fallback to basic nvidia-smi
+        print(f"pynvml unavailable: {e}")
+
+    try:
+        # Still get VRAM usage from nvidia-smi (more reliable for memory)
         result = subprocess.run(
             [
                 "nvidia-smi",
@@ -33,10 +63,21 @@ def get_gpu_usage_by_pid() -> Dict[int, Dict]:
                     try:
                         pid = int(parts[0])
                         vram_mb = int(parts[1])
-                        gpu_usage[pid] = {
-                            "vram_mb": vram_mb,
-                            "gpu_uuid": parts[2] if len(parts) > 2 else None,
-                        }
+
+                        # Update existing entry or create new one
+                        if pid in gpu_usage:
+                            gpu_usage[pid]["vram_mb"] = vram_mb
+                            gpu_usage[pid]["gpu_uuid"] = (
+                                parts[2] if len(parts) > 2 else None
+                            )
+                        else:
+                            # No pynvml data, just VRAM info
+                            gpu_usage[pid] = {
+                                "gpu_util_percent": 0,  # Unknown without pynvml
+                                "gpu_mem_percent": 0,
+                                "vram_mb": vram_mb,
+                                "gpu_uuid": parts[2] if len(parts) > 2 else None,
+                            }
                     except ValueError:
                         continue
 
@@ -90,8 +131,8 @@ def get_process_metrics(pid: int) -> Optional[Dict]:
     try:
         proc = psutil.Process(pid)
 
-        # Get basic metrics with interval for accurate CPU measurement
-        cpu_percent = proc.cpu_percent(interval=0.1)
+        # Get basic metrics - use non-blocking CPU measurement for speed
+        cpu_percent = proc.cpu_percent(interval=None)
         memory_info = proc.memory_info()
 
         # Get I/O stats if available
@@ -150,6 +191,10 @@ def aggregate_process_metrics(metrics_list: List[Dict], pids: List[int]) -> Dict
     # Get GPU usage for all PIDs in this service
     gpu_usage_by_pid = get_gpu_usage_by_pid()
     total_vram = sum(gpu_usage_by_pid.get(pid, {}).get("vram_mb", 0) for pid in pids)
+    max_gpu_util = max(
+        (gpu_usage_by_pid.get(pid, {}).get("gpu_util_percent", 0) for pid in pids),
+        default=0,
+    )
 
     return {
         "cpu_percent": total_cpu,
@@ -159,6 +204,7 @@ def aggregate_process_metrics(metrics_list: List[Dict], pids: List[int]) -> Dict
         "io_read_mb": total_read / (1024 * 1024),
         "io_write_mb": total_write / (1024 * 1024),
         "gpu_vram_mb": total_vram,
+        "gpu_util_percent": max_gpu_util,
         "oldest_create_time": oldest_time,
     }
 
@@ -202,6 +248,7 @@ def get_service_metrics(service_name: str) -> Dict:
                 "io_read_mb": 0.0,
                 "io_write_mb": 0.0,
                 "gpu_vram_mb": 0,
+                "gpu_util_percent": 0,
                 "uptime_seconds": 0,
             },
         }
@@ -237,6 +284,7 @@ def get_service_metrics(service_name: str) -> Dict:
             "io_read_mb": aggregated["io_read_mb"],
             "io_write_mb": aggregated["io_write_mb"],
             "gpu_vram_mb": aggregated["gpu_vram_mb"],
+            "gpu_util_percent": aggregated["gpu_util_percent"],
             "uptime_seconds": uptime_seconds,
         },
     }

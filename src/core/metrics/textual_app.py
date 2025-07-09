@@ -162,6 +162,7 @@ class SystemMetricsWidget(Static):
         self.previous_metrics = {}
         self.trend_hold_count = {}  # Hold trend states longer
         self.trend_directions = {}  # Store actual trend directions
+        # Remove unused trend_baseline
 
     def set_hardware_info(self, hardware_info: Dict):
         """Set hardware information"""
@@ -272,11 +273,11 @@ class SystemMetricsWidget(Static):
             f"Disk:    {disk_percent:5.1f}% {disk_bar} {disk_trend}   {disk_used}/{disk_total} {disk_type}"
         )
 
-        # Store for next comparison
-        self.previous_metrics = metrics.copy()
-
         # Update the widget content
         self.update("\n".join(lines))
+
+        # Store for next comparison AFTER displaying (so trends use the ACTUAL previous values)
+        self.previous_metrics = metrics.copy()
 
     def format_bytes(self, bytes_value: int) -> str:
         """Format bytes into human readable format"""
@@ -303,32 +304,33 @@ class SystemMetricsWidget(Static):
 
     def get_trend(self, metric_name: str, current: float, previous: float) -> str:
         """Get trend indicator with better state holding"""
+        # If we're already holding a trend, use baseline for comparison
+        if (
+            metric_name in self.trend_hold_count
+            and self.trend_hold_count[metric_name] > 0
+        ):
+            self.trend_hold_count[metric_name] -= 1
+            stored_trend = self.trend_directions.get(metric_name, " ")
+            return stored_trend
+
+        # Calculate new trend - use previous value for fresh comparison
         diff = current - previous
 
-        # Determine trend direction - lower threshold to catch more changes
-        if abs(diff) < 0.1:  # Lower threshold to catch smaller changes
+        # Determine trend direction - very low threshold to catch small changes
+        if abs(diff) < 0.05:  # Very low threshold to catch small changes
             trend = " "  # Blank space instead of right arrow
         elif diff > 0:
             trend = "↗"  # Diagonal up-right arrow
         else:
             trend = "↘"  # Diagonal down-right arrow
 
-        # Hold trend state for a few cycles
+        # If new significant trend detected, start holding it
         if trend != " ":
-            # New trend detected - set or reset the hold counter
             self.trend_hold_count[metric_name] = 3  # Hold for 3 cycles
             self.trend_directions[metric_name] = trend  # Store the actual direction
             return trend
-        elif (
-            metric_name in self.trend_hold_count
-            and self.trend_hold_count[metric_name] > 0
-        ):
-            # Continue showing the stored trend and decrement counter
-            self.trend_hold_count[metric_name] -= 1
-            stored_trend = self.trend_directions.get(metric_name, " ")
-            return stored_trend
         else:
-            # No active trend and no hold counter
+            # No significant change and no active hold
             return " "  # Blank space for stable metrics
 
 
@@ -352,6 +354,9 @@ class ServicesTableWidget(DataTable):
 
     def update_services(self, service_metrics: List[Dict]):
         """Update the services table - simple rebuild approach for now"""
+        # Store service metrics for later use
+        self.service_metrics = service_metrics
+
         # Store the current cursor position to restore it
         current_cursor = self.cursor_coordinate
 
@@ -542,7 +547,7 @@ class ServicesTableWidget(DataTable):
 
                 # Skip expanded detail rows
                 if service_name in self.expanded_services:
-                    row_index += 5  # Skip the detail rows
+                    row_index += 1  # Skip the single detail row
 
             except Exception:
                 # If update fails, fallback to rebuild
@@ -714,7 +719,7 @@ class ServicesTableWidget(DataTable):
             service_count += 1
             # If service is expanded, skip the detail rows
             if service["service_name"] in self.expanded_services:
-                service_count += 4  # Skip detail rows
+                service_count += 1  # Skip single detail row
         return 0
 
     def toggle_expansion(self, service_index: int):
@@ -739,6 +744,9 @@ class ServicesTableWidget(DataTable):
 
 class MetricsApp(App):
     """Main Textual application for the metrics dashboard"""
+
+    # Disable mouse support to avoid SSH terminal issues
+    ENABLE_COMMAND_PALETTE = False
 
     CSS = """
     SystemMetricsWidget {
@@ -822,6 +830,8 @@ class MetricsApp(App):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        # Disable mouse support for SSH compatibility
+        self.mouse_capture = False
         self.refresh_interval = refresh_interval  # Fast UI updates
         self.data_refresh_interval = data_refresh_interval  # Slower data collection
         self.system_widget = None
@@ -928,6 +938,10 @@ class MetricsApp(App):
 
     def action_expand_service(self) -> None:
         """Expand selected service"""
+        if not self.services_widget.service_metrics:
+            self.notify("No services available", title="Debug", timeout=2)
+            return
+
         service_index = self.services_widget.get_selected_service_index()
         if service_index < len(self.services_widget.service_metrics):
             service_name = self.services_widget.service_metrics[service_index][
@@ -938,7 +952,13 @@ class MetricsApp(App):
                 title="Debug",
                 timeout=2,
             )
-        self.services_widget.toggle_expansion(service_index)
+            self.services_widget.toggle_expansion(service_index)
+        else:
+            self.notify(
+                f"Invalid service index: {service_index}/{len(self.services_widget.service_metrics)}",
+                title="Debug",
+                timeout=2,
+            )
 
     def action_collapse_service(self) -> None:
         """Collapse selected service"""

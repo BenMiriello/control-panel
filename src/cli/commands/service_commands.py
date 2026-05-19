@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import subprocess
+
 import click
 
 # Command group metadata
@@ -7,7 +9,7 @@ __group__ = "Service Management"
 
 # Import from core business logic and CLI utilities
 from core.config import load_config, save_config
-from core.service import control_service, register_service
+from core.service import control_service, register_service, unregister_service
 
 from ..completion import PORT_RANGE, SERVICE_NAME, SMART_PORT
 
@@ -421,3 +423,126 @@ def restart_all(enabled_only):
             bold=True,
             color=True,
         )
+
+
+@click.command()
+@click.argument("name", type=SERVICE_NAME)
+def enable(name):
+    """Enable a service to start automatically"""
+    config = load_config()
+
+    if name not in config["services"]:
+        click.secho(
+            f"✗ Service '{name}' not found", fg="red", bold=True, err=True, color=True
+        )
+        return
+
+    subprocess.run(["systemctl", "--user", "enable", f"control-panel@{name}.service"])
+
+    # Update config
+    config["services"][name]["enabled"] = True
+    save_config(config)
+
+    click.secho(
+        f"✓ Service '{click.style(name, fg='cyan', bold=True)}' enabled to start automatically",
+        fg="green",
+        bold=True,
+        color=True,
+    )
+
+
+@click.command()
+@click.argument("name", type=SERVICE_NAME)
+def disable(name):
+    """Disable a service from starting automatically"""
+    config = load_config()
+
+    if name not in config["services"]:
+        click.secho(
+            f"✗ Service '{name}' not found", fg="red", bold=True, err=True, color=True
+        )
+        return
+
+    subprocess.run(["systemctl", "--user", "disable", f"control-panel@{name}.service"])
+
+    # Update config
+    config["services"][name]["enabled"] = False
+    save_config(config)
+
+    click.secho(
+        f"✓ Service '{click.style(name, fg='cyan', bold=True)}' disabled from starting automatically",
+        fg="yellow",
+        bold=True,
+        color=True,
+    )
+
+
+@click.command()
+@click.argument("name", type=SERVICE_NAME)
+def auto(name):
+    """Enable a service to auto-start at system boot and start it now"""
+    # First enable auto-start
+    config = load_config()
+
+    if name not in config["services"]:
+        click.secho(
+            f"✗ Service '{name}' not found", fg="red", bold=True, err=True, color=True
+        )
+        return
+
+    subprocess.run(["systemctl", "--user", "enable", f"control-panel@{name}.service"])
+
+    # Update config
+    config["services"][name]["enabled"] = True
+    save_config(config)
+
+    click.secho(
+        f"✓ Service '{click.style(name, fg='cyan', bold=True)}' enabled to start automatically",
+        fg="green",
+        bold=True,
+        color=True,
+    )
+
+    # Now start the service
+    success, error = control_service(name, "start")
+    if not success:
+        click.secho(
+            f"✗ Error starting service: {error}",
+            fg="red",
+            bold=True,
+            err=True,
+            color=True,
+        )
+        click.echo(f"Check logs with: panel logs {click.style(name, fg='cyan')}")
+    else:
+        click.secho(
+            f"✓ Service '{click.style(name, fg='cyan', bold=True)}' started successfully",
+            fg="green",
+            bold=True,
+            color=True,
+        )
+
+
+@click.command()
+@click.argument("name", type=SERVICE_NAME)
+def unregister(name):
+    """Unregister a service"""
+    config = load_config()
+
+    if name not in config["services"]:
+        click.echo(f"Error: Service '{name}' not found")
+        return
+
+    # Kill processes using the port
+    port = config["services"][name]["port"]
+    from core.node_helper import kill_process_by_port
+
+    kill_process_by_port(port)
+
+    # Unregister the service
+    success, error = unregister_service(name)
+    if not success:
+        click.echo(f"Error: {error}")
+        return
+
+    click.echo(f"Service '{name}' unregistered")

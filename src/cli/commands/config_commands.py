@@ -44,3 +44,20 @@ def restore(backup_file):
     # Restore from backup
     save_config(backup_data)
     click.echo(f"Configuration restored from {backup_file}")
+
+
+@click.command()
+@click.argument("range_name")
+@click.argument("start", type=int)
+@click.argument("end", type=int)
+def add_range(range_name, start, end):
+    """Add a new port range"""
+    if end <= start:
+        click.echo("Error: End port must be greater than start port")
+        return
+
+    config = load_config()
+    config["port_ranges"][range_name] = {"start": start, "end": end}
+    save_config(config)
+
+    click.echo(f"Port range '{range_name}' added: {start}-{end}")

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import subprocess
+
 import click
 
 # Command group metadata
@@ -405,3 +407,103 @@ def _show_services_table(active_only=False):
 
     output = tabulate(rows, headers=headers, tablefmt="simple")
     click.echo(output, color=True)
+
+
+# Custom command class to add shortcuts with proper formatting
+class LogsCommand(click.Command):
+    def get_help(self, ctx):
+        help_text = super().get_help(ctx)
+        lines = help_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == "Options:":
+                lines.insert(i, "")
+                lines.insert(i, "Shortcut: l")
+                break
+        return "\n".join(lines)
+
+
+@click.command(cls=LogsCommand)
+@click.argument("name", type=SERVICE_NAME)
+@click.option("--lines", "-n", default=25, help="Number of lines to show initially")
+@click.option("--follow", "-f", is_flag=True, help="Follow log output in real-time")
+@click.option("--no-pager", is_flag=True, help="Don't use pager, output directly")
+def logs(name, lines, follow, no_pager):
+    """View service logs with scrollable paging"""
+    config = load_config()
+
+    if name not in config["services"]:
+        click.echo(f"Error: Service '{name}' not found")
+        return
+
+    service_name = f"control-panel@{name}.service"
+
+    if follow:
+        # Streaming mode: show last N lines, then follow
+        cmd = ["journalctl", "--user", "-f", "-n", str(lines), "-u", service_name]
+        try:
+            subprocess.run(cmd)
+        except KeyboardInterrupt:
+            pass
+    else:
+        # Paged mode: show last N lines with pager for scrolling
+        if no_pager:
+            # Direct output without pager
+            cmd = [
+                "journalctl",
+                "--user",
+                "-n",
+                str(lines),
+                "-u",
+                service_name,
+                "--no-pager",
+            ]
+            subprocess.run(cmd)
+        else:
+            # Use less directly for paged viewing
+            try:
+                # First get the output
+                cmd = [
+                    "journalctl",
+                    "--user",
+                    "-n",
+                    str(lines),
+                    "-u",
+                    service_name,
+                    "--no-pager",
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+
+                if result.stdout:
+                    # Use less with proper options for paging
+                    # -R: handle color codes, -S: don't wrap long lines, -X: don't clear screen on exit
+                    less_proc = subprocess.Popen(
+                        ["less", "-R", "-S", "-X"], stdin=subprocess.PIPE, text=True
+                    )
+                    less_proc.communicate(input=result.stdout)
+                    less_proc.wait()
+
+                if result.stderr:
+                    click.echo(result.stderr, err=True)
+
+            except KeyboardInterrupt:
+                pass
+            except FileNotFoundError:
+                # Fallback if less is not available - just print
+                cmd = [
+                    "journalctl",
+                    "--user",
+                    "-n",
+                    str(lines),
+                    "-u",
+                    service_name,
+                    "--no-pager",
+                ]
+                subprocess.run(cmd)
+
+
+# Command aliases
+@click.command("ls")
+def ls():
+    """List all registered services (alias for 'ps')"""
+    # Call the ps command without arguments to show all services
+    ps.callback(None, False)

@@ -12,7 +12,9 @@ from ..config import (
 )
 
 
-def register_service(name, command, port, working_dir, range_name, env_vars):
+def register_service(
+    name, command, port, working_dir, range_name, env_vars, script_dir=None
+):
     """Register a new service"""
     config = load_config()
 

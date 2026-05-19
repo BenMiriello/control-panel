@@ -123,7 +123,7 @@ def recover_from_env_files():
         env_vars = {}
         command = None
         port = None
-        working_dir = "/home/simonsays"  # default
+        working_dir = str(Path.home())  # default
 
         with open(env_file) as f:
             for line in f:

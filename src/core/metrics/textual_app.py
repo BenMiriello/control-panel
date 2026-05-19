@@ -344,8 +344,8 @@ class ServicesTableWidget(DataTable):
         self.cursor_type = "row"
 
     def on_mount(self) -> None:
-        """Set up the table columns"""
-        self.add_column("Service", width=23)
+        """Set up the table columns with fixed widths"""
+        self.add_column("Service", width=30)
         self.add_column("CPU", width=6)
         self.add_column("RAM", width=6)
         self.add_column("GPU", width=6)
@@ -356,6 +356,9 @@ class ServicesTableWidget(DataTable):
         """Update the services table - simple rebuild approach for now"""
         # Store service metrics for later use
         self.service_metrics = service_metrics
+
+        # Cache port data for all services to avoid lag during expansion
+        self._cache_port_data(service_metrics)
 
         # Store the current cursor position to restore it
         current_cursor = self.cursor_coordinate
@@ -368,14 +371,15 @@ class ServicesTableWidget(DataTable):
             service_name = service["service_name"]
             metrics = service["metrics"]
 
-            # Format service display with expand/collapse indicator
+            # Check if service should show expansion/container notation
+            pids = service.get("pids", [])
+            has_subprocesses = self._should_show_expansion(service_name, pids)
             is_expanded = service_name in self.expanded_services
-            expansion_indicator = "▼" if is_expanded else "▶"
 
-            # Format service name
-            service_display = f"{expansion_indicator} {service_name}"
-            if service.get("port"):
-                service_display += f":{service['port']}"
+            # Format service display with container notation and expansion logic
+            service_display = self._format_service_display(
+                service_name, service.get("port"), has_subprocesses, is_expanded
+            )
 
             # Format metrics
             cpu_str = (
@@ -412,9 +416,9 @@ class ServicesTableWidget(DataTable):
                 service_display, cpu_str, memory_str, gpu_str, vram_str, status
             )
 
-            # Add expanded details if service is expanded
-            if is_expanded:
-                self._add_detailed_metrics(service)
+            # Add subprocess rows if service is expanded and has subprocesses
+            if is_expanded and has_subprocesses:
+                self._add_subprocess_rows(service)
 
         # Restore cursor position if possible
         try:
@@ -449,14 +453,15 @@ class ServicesTableWidget(DataTable):
             service_name = service["service_name"]
             metrics = service["metrics"]
 
-            # Format service display with expand/collapse indicator
+            # Check if service should show expansion/container notation
+            pids = service.get("pids", [])
+            has_subprocesses = self._should_show_expansion(service_name, pids)
             is_expanded = service_name in self.expanded_services
-            expansion_indicator = "▼" if is_expanded else "▶"
 
-            # Format service name
-            service_display = f"{expansion_indicator} {service_name}"
-            if service.get("port"):
-                service_display += f":{service['port']}"
+            # Format service display with container notation and expansion logic
+            service_display = self._format_service_display(
+                service_name, service.get("port"), has_subprocesses, is_expanded
+            )
 
             # Format metrics
             cpu_str = (
@@ -493,9 +498,9 @@ class ServicesTableWidget(DataTable):
                 service_display, cpu_str, memory_str, gpu_str, vram_str, status
             )
 
-            # Add expanded details if service is expanded
-            if is_expanded:
-                self._add_detailed_metrics(service)
+            # Add subprocess rows if service is expanded and has subprocesses
+            if is_expanded and has_subprocesses:
+                self._add_subprocess_rows(service)
 
     def _update_existing_rows(self, service_metrics: List[Dict]):
         """Update only changed cells in existing rows"""
@@ -554,60 +559,280 @@ class ServicesTableWidget(DataTable):
                 self._rebuild_table(service_metrics)
                 break
 
-    def _add_detailed_metrics(self, service: Dict):
-        """Add detailed metrics rows to DataTable with proper formatting"""
-        metrics = service["metrics"]
+    def _add_subprocess_rows(self, service: Dict):
+        """Add subprocess rows with enhanced port-purpose detection and container notation"""
+        import psutil
+
+        from .service_metrics import get_process_metrics
+
         pids = service.get("pids", [])
+        service_name = service["service_name"]
+        main_service_port = service.get("port")
 
-        # CPU detail with proper formatting
-        cpu_percent = metrics.get("cpu_percent", 0)
-        main_pid = pids[0] if pids else "N/A"
-        threads = metrics.get("num_threads", 0)
-        cpu_bar = self.create_progress_bar(cpu_percent, 8)
+        # If only one PID, no subprocesses to show
+        if len(pids) <= 1:
+            return
 
-        self.add_row(
-            f"  ├─ CPU: {cpu_bar} {cpu_percent:.1f}%",
-            f"PID: {main_pid}",
-            f"Threads: {threads}",
-            "",
-            "",
-            "",
+        # Use cached port data to avoid performance lag
+        port_data = getattr(self, "_port_data_cache", {}).get(service_name, {})
+        container_info = port_data.get("container_info")
+        detected_ports = port_data.get("detected_ports", {})
+
+        # Get process information for each PID
+        subprocess_entries = []
+
+        for pid in pids:
+            try:
+                proc = psutil.Process(pid)
+                cmdline = proc.cmdline()
+                process_name = proc.name()
+
+                # Determine process port if any
+                process_port = detected_ports.get(str(pid))
+
+                # For containers, assign port to container-related processes
+                if container_info and not process_port:
+                    external_ports = container_info.get("external_ports", [])
+
+                    # Assign port to processes that are not docker logs
+                    if (
+                        external_ports
+                        and "docker logs" not in " ".join(cmdline).lower()
+                    ):
+                        try:
+                            process_port = int(external_ports[0])
+                        except (ValueError, IndexError):
+                            pass
+
+                # Skip startup scripts and meaningless processes
+                if self._should_skip_process(
+                    process_name, cmdline, process_port, main_service_port
+                ):
+                    continue
+
+                # Get process metrics
+                process_metrics = get_process_metrics(pid)
+                if not process_metrics:
+                    continue
+
+                # Generate semantic process name
+                display_name = self._generate_process_display_name(
+                    process_name, cmdline, process_port, container_info
+                )
+
+                subprocess_entries.append(
+                    {
+                        "pid": pid,
+                        "display_name": display_name,
+                        "metrics": process_metrics,
+                        "port": process_port,
+                    }
+                )
+
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        # Sort subprocess entries by importance (main processes first)
+        subprocess_entries.sort(key=self._subprocess_sort_key)
+
+        # Store the actual count for navigation alignment
+        if not hasattr(self, "_actual_subprocess_counts"):
+            self._actual_subprocess_counts = {}
+        self._actual_subprocess_counts[service_name] = len(subprocess_entries)
+
+        # Add subprocess rows to table
+        main_metrics = service["metrics"]
+        for entry in subprocess_entries:
+            self._add_single_subprocess_row(entry, main_metrics)
+
+    def _should_skip_process(
+        self,
+        process_name: str,
+        cmdline: List[str],
+        process_port: int,
+        main_service_port: int,
+    ) -> bool:
+        """Determine if a process should be skipped in subprocess display"""
+        cmdline_str = " ".join(cmdline).lower()
+
+        # Skip if process has SAME port as main service (not useful)
+        if process_port and process_port == main_service_port:
+            return True
+
+        # Skip startup scripts even without ports
+        if (
+            process_name.lower() in {"startup.sh", "run.py"}
+            or "startup" in cmdline_str
+            or "run.py" in cmdline_str
+        ):
+            return True
+
+        # Keep processes with DIFFERENT ports (useful)
+        if process_port and process_port != main_service_port:
+            return False
+
+        # Skip npm startup commands
+        if (
+            process_name.lower() == "npm"
+            or "npm start" in cmdline_str
+            or "npm run" in cmdline_str
+        ):
+            return True
+
+        # Skip basic shell processes without meaningful commands
+        if process_name.lower() in {"bash", "sh"} and len(cmdline) <= 3:
+            return True
+
+        # Skip docker logs processes
+        if "docker logs" in cmdline_str:
+            return True
+
+        return False
+
+    def _generate_process_display_name(
+        self,
+        process_name: str,
+        cmdline: List[str],
+        process_port: int,
+        container_info: Dict,
+    ) -> str:
+        """Generate semantic display name for subprocess"""
+        # Container notation
+        if container_info:
+            runtime = container_info.get("runtime", "container")
+            container_name = container_info.get("container_name", "unknown")
+            if process_port:
+                return f"└─ [{runtime}] {container_name}:{process_port}"
+            else:
+                return f"└─ [{runtime}] {container_name}"
+
+        # Multi-port semantic splitting
+        if process_port:
+            port_category = self._categorize_port(process_port)
+            if port_category:
+                return f"└─ {port_category}:{process_port}"
+            else:
+                return f"└─ {process_name}:{process_port}"
+
+        # Semantic process name from command line
+        semantic_name = self._extract_semantic_name(process_name, cmdline)
+        return f"└─ {semantic_name}"
+
+    def _categorize_port(self, port: int) -> str:
+        """Categorize port by purpose for semantic naming"""
+        if 8000 <= port <= 8999 or 3000 <= port <= 3999:
+            return "web server"
+        elif 5000 <= port <= 5999:
+            return "api server"
+        elif port == 35729:
+            return "dev tools"
+        elif 11430 <= port <= 11440:
+            return "ai service"
+        elif port in [80, 443]:
+            return "web server"
+        else:
+            return None
+
+    def _extract_semantic_name(self, process_name: str, cmdline: List[str]) -> str:
+        """Extract meaningful name from process command line"""
+        cmdline_str = " ".join(cmdline).lower()
+
+        # Look for specific patterns
+        if "server.js" in cmdline_str:
+            return "node server.js"
+        elif "app.js" in cmdline_str:
+            return "node app.js"
+        elif "main.py" in cmdline_str:
+            return "python main.py"
+        elif "gunicorn" in cmdline_str:
+            return "gunicorn worker"
+        elif "uvicorn" in cmdline_str:
+            return "uvicorn server"
+        elif "worker" in cmdline_str:
+            return f"{process_name} worker"
+        else:
+            return process_name
+
+    def _subprocess_sort_key(self, entry: Dict) -> tuple:
+        """Sort key for subprocess entries - main processes first"""
+        display_name = entry["display_name"]
+
+        # Container processes first
+        if "[" in display_name:
+            return (0, display_name)
+        # Web servers next
+        elif "web server" in display_name:
+            return (1, display_name)
+        # API servers
+        elif "api server" in display_name:
+            return (2, display_name)
+        # Other processes with ports
+        elif ":" in display_name:
+            return (3, display_name)
+        # Everything else
+        else:
+            return (4, display_name)
+
+    def _add_single_subprocess_row(self, entry: Dict, main_metrics: Dict):
+        """Add a single subprocess row to the table"""
+        metrics = entry["metrics"]
+
+        # Format process metrics
+        cpu_str = (
+            f"{metrics['cpu_percent']:.1f}%" if metrics["cpu_percent"] >= 0 else "--"
+        )
+        memory_str = (
+            self.format_bytes(metrics["memory_rss"])
+            if metrics["memory_rss"] > 0
+            else "--"
         )
 
-        # Memory detail with proper formatting
-        memory_mb = metrics.get("memory_mb", 0)
-        memory_str = self.format_bytes(int(memory_mb * 1024 * 1024))
-        self.add_row(f"  ├─ Memory: {memory_str}", "RSS Memory", "", "", "", "")
+        # GPU metrics (for now, show as no GPU usage for individual processes)
+        gpu_str = "--"
+        vram_str = "--"
 
-        # Network detail with proper formatting
-        connections = metrics.get("connections", 0)
+        # Use same uptime as parent service
+        uptime_str = self.format_uptime(main_metrics["uptime_seconds"])
+        status = f"Running {uptime_str}"
+
+        # Add subprocess row
         self.add_row(
-            "  ├─ Network: ↑--KB/s ↓--KB/s",
-            f"Connections: {connections}",
-            "",
-            "",
-            "",
-            "",
+            entry["display_name"], cpu_str, memory_str, gpu_str, vram_str, status
         )
 
-        # Disk I/O detail
-        io_read_mb = metrics.get("io_read_mb", 0)
-        io_write_mb = metrics.get("io_write_mb", 0)
-        io_read_str = self.format_bytes(int(io_read_mb * 1024 * 1024))
-        io_write_str = self.format_bytes(int(io_write_mb * 1024 * 1024))
-        self.add_row(
-            f"  ├─ Disk I/O: Read {io_read_str}/s",
-            f"Write {io_write_str}/s",
-            "",
-            "",
-            "",
-            "",
-        )
+    def _cache_port_data(self, service_metrics: List[Dict]):
+        """Cache port detection data to avoid performance lag"""
+        from ..services.ports import detect_service_ports
 
-        # Uptime with proper formatting
-        uptime_seconds = metrics.get("uptime_seconds", 0)
-        uptime_str = self.format_uptime(uptime_seconds)
-        self.add_row(f"  ╰─ Uptime: {uptime_str}", "", "", "", "", "")
+        if not hasattr(self, "_port_data_cache"):
+            self._port_data_cache = {}
+
+        for service in service_metrics:
+            service_name = service["service_name"]
+            if service_name not in self._port_data_cache:
+                self._port_data_cache[service_name] = detect_service_ports(service_name)
+
+    def _should_show_expansion(self, service_name: str, pids: List[int]) -> bool:
+        """Determine if a service should show expansion arrow based on port architecture"""
+        return len(pids) > 1
+
+    def _format_service_display(
+        self, service_name: str, port: int, has_subprocesses: bool, is_expanded: bool
+    ) -> str:
+        """Format service display name with container notation and expansion indicators"""
+        if has_subprocesses:
+            # Service with expansion - show expansion indicator
+            expansion_indicator = "▼" if is_expanded else "▶"
+            service_display = f"{expansion_indicator} {service_name}"
+        else:
+            # Regular service, no expansion
+            service_display = f"  {service_name}"
+
+        # Add port if available
+        if port:
+            service_display += f":{port}"
+
+        return service_display
 
     def _create_detailed_metrics_old(self, service: Dict) -> List[str]:
         """Create detailed metrics display for expanded service"""
@@ -700,43 +925,63 @@ class ServicesTableWidget(DataTable):
         empty = width - filled
         return f"[{'█' * filled}{'░' * empty}]"
 
-    def move_cursor_up(self):
-        """Move cursor up - use DataTable's built-in navigation"""
-        self.action_cursor_up()
+    def action_cursor_up(self):
+        """Navigate up through all rows (services and subprocesses)"""
+        super().action_cursor_up()
 
-    def move_cursor_down(self):
-        """Move cursor down - use DataTable's built-in navigation"""
-        self.action_cursor_down()
+    def action_cursor_down(self):
+        """Navigate down through all rows (services and subprocesses)"""
+        super().action_cursor_down()
 
     def get_selected_service_index(self) -> int:
-        """Get the currently selected service index using DataTable cursor"""
+        """Get the currently selected service index, accounting for subprocess rows"""
         cursor_row = self.cursor_row
-        # Map cursor row to service index, accounting for detail rows
-        service_count = 0
-        for i, service in enumerate(self.service_metrics):
-            if service_count == cursor_row:
-                return i
-            service_count += 1
-            # If service is expanded, skip the detail rows
-            if service["service_name"] in self.expanded_services:
-                service_count += 1  # Skip single detail row
-        return 0
+        service_index = 0
+        row_count = 0
+
+        # Walk through services and count rows to find which service the cursor is on
+        for service in self.service_metrics:
+            # Main service row
+            if row_count == cursor_row:
+                return service_index
+            row_count += 1
+
+            # Subprocess rows if expanded
+            service_name = service["service_name"]
+            is_expanded = service_name in self.expanded_services
+
+            if is_expanded:
+                # Use actual subprocess count from filtering, not total PIDs
+                actual_count = getattr(self, "_actual_subprocess_counts", {}).get(
+                    service_name, 0
+                )
+                for _ in range(actual_count):
+                    if row_count == cursor_row:
+                        return service_index  # Still return main service index
+                    row_count += 1
+
+            service_index += 1
+
+        # Fallback
+        return min(service_index - 1, len(self.service_metrics) - 1)
 
     def toggle_expansion(self, service_index: int):
-        """Toggle expansion of a service"""
+        """Toggle expansion of a service (only if it has subprocesses)"""
         if service_index < len(self.service_metrics):
-            service_name = self.service_metrics[service_index]["service_name"]
+            service = self.service_metrics[service_index]
+            service_name = service["service_name"]
+            pids = service.get("pids", [])
+            has_subprocesses = len(pids) > 1
+
+            # Only allow expansion for services with subprocesses
+            if not has_subprocesses:
+                return
 
             if service_name in self.expanded_services:
                 self.expanded_services.remove(service_name)
-                # Debug: notify about collapse
-                print(f"DEBUG: Collapsing {service_name}")
             else:
-                # Clear other expanded services (only one expanded at a time)
-                self.expanded_services.clear()
+                # Allow multiple services to be expanded simultaneously
                 self.expanded_services.add(service_name)
-                # Debug: notify about expand
-                print(f"DEBUG: Expanding {service_name}")
 
             # Refresh the display
             self.update_services(self.service_metrics)
@@ -930,11 +1175,11 @@ class MetricsApp(App):
 
     def action_cursor_up(self) -> None:
         """Move cursor up in services table"""
-        self.services_widget.move_cursor_up()
+        self.services_widget.action_cursor_up()
 
     def action_cursor_down(self) -> None:
         """Move cursor down in services table"""
-        self.services_widget.move_cursor_down()
+        self.services_widget.action_cursor_down()
 
     def action_expand_service(self) -> None:
         """Expand selected service"""

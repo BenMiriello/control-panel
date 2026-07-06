@@ -3,164 +3,209 @@
 {% block title %}Control Panel - Dashboard{% endblock %}
 
 {% block content %}
-{% include 'metrics_widget.html' %}
+<style>
+.cp-dash { max-width:1180px; margin:0 auto; padding:26px 22px 80px; }
+@media (max-width:680px) { .cp-dash { padding:18px 14px 70px; } }
 
-<div class="card mb-4" id="gpu-panel" style="display: none;">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h4 class="mb-0">GPU</h4>
-        <span id="gpu-vram-summary" class="text-muted small"></span>
+/* Vertical rhythm: every top-level dashboard section gets consistent spacing
+   below it (24px), so adding/removing a section never leaves two butting
+   together. The toolbar sits closer (16px) to the list it controls. */
+.cp-dash > * { margin-bottom:24px; }
+.cp-dash > *:last-child { margin-bottom:0; }
+.cp-toolbar { margin-bottom:16px; }
+
+/* toolbar */
+.cp-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.cp-search-wrap { position:relative; display:flex; align-items:center; flex:1; min-width:210px; max-width:360px; }
+.cp-search-icon { position:absolute; left:11px; color:var(--text-3); pointer-events:none; }
+.cp-chips { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.cp-chip {
+  display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 11px;
+  border-radius:8px; font:500 12.5px var(--ui); cursor:pointer;
+  border:1px solid var(--border); background:var(--surface); color:var(--text-2);
+}
+.cp-chip.active { background:var(--accent-soft); color:var(--accent); border-color:transparent; }
+.cp-chip-count { font-family:var(--mono); font-size:11px; opacity:.75; }
+.cp-chip-dot { width:6px; height:6px; border-radius:50%; flex:none; }
+.cp-sortbar {
+  display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 4px 0 11px;
+  border-radius:8px; border:1px solid var(--border); background:var(--surface);
+}
+.cp-sortbar .label { font-size:12px; color:var(--text-3); }
+.cp-sort-btn {
+  height:26px; padding:0 8px; border-radius:6px; border:none; background:transparent;
+  color:var(--text-2); font:500 12px var(--ui); cursor:pointer;
+  display:inline-flex; align-items:center; gap:3px;
+}
+.cp-sort-btn.active { background:var(--accent-soft); color:var(--accent); }
+.cp-viewswitch {
+  display:inline-flex; align-items:center; gap:2px; padding:3px;
+  border-radius:9px; border:1px solid var(--border); background:var(--surface-2);
+}
+.cp-view-btn {
+  height:26px; padding:0 10px; border-radius:6px; border:none; font:500 12px var(--ui);
+  cursor:pointer; display:inline-flex; align-items:center; gap:6px; color:var(--text-2);
+  background:transparent; transition:background .18s ease, color .18s ease;
+}
+.cp-view-btn.active { background:var(--surface); color:var(--text); box-shadow:var(--shadow-sm); }
+
+/* empty state */
+.cp-empty { text-align:center; padding:60px 20px; border:1px dashed var(--border); border-radius:12px; color:var(--text-3); }
+
+/* cards view */
+.cp-cards { position:relative; }
+.cp-card {
+  position:absolute; top:0; left:0; background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; box-shadow:var(--shadow-sm); overflow:hidden;
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+}
+.cp-card-head { display:flex; align-items:center; gap:10px; padding:13px 14px; }
+.cp-card-toggle {
+  display:flex; align-items:center; gap:9px; flex:1; min-width:0;
+  background:transparent; border:none; padding:0; cursor:pointer; text-align:left;
+}
+.cp-chevron { color:var(--text-3); transition:transform .28s cubic-bezier(.4,0,.2,1); flex:none; }
+.cp-chevron.open { transform:rotate(90deg); }
+.cp-card-name { font-weight:600; font-size:14px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cp-port-chip {
+  font-family:var(--mono); font-size:11.5px; color:var(--text-2); background:var(--surface-inset);
+  border:1px solid var(--border); padding:1px 7px; border-radius:5px; flex:none;
+}
+.cp-port-warn { font-family:var(--mono); font-size:10.5px; color:var(--amber); background:var(--amber-dim); padding:1px 6px; border-radius:5px; flex:none; }
+.cp-port-dyn { font-family:var(--mono); font-size:10.5px; color:var(--text-3); flex:none; }
+.cp-auto-chip {
+  font-size:10.5px; font-weight:500; color:var(--text-2); background:var(--surface-2);
+  border:1px solid var(--border); padding:2px 7px; border-radius:5px; flex:none;
+}
+.cp-card-body-wrap { display:grid; grid-template-rows:0fr; transition:grid-template-rows .3s cubic-bezier(.4,0,.2,1); }
+.cp-card-body-wrap.open { grid-template-rows:1fr; }
+.cp-card-body-inner { overflow:hidden; min-height:0; }
+.cp-card-body { border-top:1px solid var(--border); padding:14px; background:var(--surface-inset); }
+.cp-code {
+  font-family:var(--mono); font-size:12px; line-height:1.55; color:var(--text); background:var(--bg);
+  border:1px solid var(--border); border-radius:7px; padding:9px 11px; word-break:break-all; white-space:pre-wrap;
+}
+.cp-meta-grid { display:grid; gap:12px; margin-top:13px; grid-template-columns:1fr 1fr; }
+@media (max-width:680px) { .cp-meta-grid { grid-template-columns:1fr; } }
+.cp-env-pill {
+  font-family:var(--mono); font-size:11px; color:var(--text-2); background:var(--bg);
+  border:1px solid var(--border); padding:2px 8px; border-radius:5px;
+}
+.cp-card-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:16px; padding-top:13px; border-top:1px solid var(--border); }
+.cp-auto-toggle {
+  display:inline-flex; align-items:center; gap:8px; height:30px; padding:0 11px; border-radius:7px;
+  border:1px solid var(--border); background:var(--surface); cursor:pointer; font:500 12px var(--ui); color:var(--text-2);
+}
+
+/* list view */
+.cp-list-grid { display:grid; align-items:center; gap:12px; grid-template-columns:26px 1.4fr 90px 2fr 70px 150px; }
+@media (max-width:680px) {
+  .cp-list-grid { grid-template-columns:18px 1fr 58px 100px; }
+  .cp-list-col-cmd, .cp-list-col-auto { display:none; }
+}
+.cp-list-header { padding:10px 16px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+.cp-list-row { padding:11px 16px; border-bottom:1px solid var(--border); }
+.cp-list-sort-btn {
+  text-align:left; background:transparent; border:none; padding:0; color:var(--text-3);
+  font:600 11px var(--ui); text-transform:uppercase; letter-spacing:.05em; cursor:pointer;
+}
+
+/* shared collapsible (port ranges) */
+.cp-collapsible { background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-sm); overflow:hidden; }
+.cp-collapsible-header { display:flex; align-items:center; gap:11px; padding:13px 16px; }
+.cp-collapsible-toggle {
+  display:flex; align-items:center; gap:11px; flex:1; min-width:0;
+  background:transparent; border:none; padding:0; cursor:pointer; text-align:left;
+}
+.cp-collapsible-body-wrap { display:grid; grid-template-rows:1fr; transition:grid-template-rows .3s cubic-bezier(.4,0,.2,1); }
+.cp-collapsible-body-wrap.closed { grid-template-rows:0fr; }
+.cp-collapsible-body-inner { overflow:hidden; min-height:0; }
+.cp-range-row { display:grid; grid-template-columns:1fr auto; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid var(--border); }
+.cp-range-row:last-child { border-bottom:none; }
+</style>
+
+<div class="cp-dash">
+  {% include 'metrics_widget.html' %}
+
+  <section id="gpu-panel" style="display:none"></section>
+
+  <div class="cp-toolbar">
+    <div class="cp-search-wrap">
+      <svg class="cp-ico cp-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="cp-search" class="cp-search" placeholder="Search name or command…" autocomplete="off">
     </div>
-    <div class="card-body">
-        <div id="gpu-unmanaged-warning" class="alert alert-warning py-2 d-none" role="alert"></div>
 
-        <h6 class="text-muted">On the card</h6>
-        <div id="gpu-processes"><em class="text-muted small">Loading…</em></div>
+    <div class="cp-chips" id="cp-chips">
+      <button class="cp-chip active" data-filter="all">All <span class="cp-chip-count" id="cp-count-all">0</span></button>
+      <button class="cp-chip" data-filter="running"><span class="cp-chip-dot" style="background:var(--green)"></span>Running <span class="cp-chip-count" id="cp-count-running">0</span></button>
+      <button class="cp-chip" data-filter="stopped"><span class="cp-chip-dot" style="background:var(--text-3)"></span>Stopped <span class="cp-chip-count" id="cp-count-stopped">0</span></button>
+      <button class="cp-chip" data-filter="auto">Auto-start <span class="cp-chip-count" id="cp-count-auto">0</span></button>
+    </div>
 
-        <h6 class="text-muted mt-3">Broker lease</h6>
-        <div class="d-flex justify-content-between align-items-center">
-            <div id="gpu-broker" class="flex-grow-1"><em class="text-muted small">Loading…</em></div>
-            <button type="button" id="gpu-clear-btn" class="btn btn-sm btn-outline-danger ms-2" style="display: none;">Clear stuck lease</button>
+    <div style="flex:1"></div>
+
+    <div class="cp-sortbar" id="cp-sortbar">
+      <span class="label">Sort</span>
+      <button class="cp-sort-btn active" data-sort="name">Name<span class="cp-sort-arrow"></span></button>
+      <button class="cp-sort-btn" data-sort="status">Status<span class="cp-sort-arrow"></span></button>
+      <button class="cp-sort-btn" data-sort="port">Port<span class="cp-sort-arrow"></span></button>
+    </div>
+
+    <div class="cp-viewswitch" id="cp-viewswitch">
+      <button class="cp-view-btn active" data-view="cards" title="Cards">
+        <svg class="cp-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+        Cards
+      </button>
+      <button class="cp-view-btn" data-view="list" title="List">
+        <svg class="cp-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        List
+      </button>
+    </div>
+  </div>
+
+  <div id="cp-empty" class="cp-empty" style="display:none">
+    <div style="font-size:14px;color:var(--text-2);margin-bottom:4px">No services match your filters</div>
+    <div style="font-size:12.5px">Try clearing the search or filter chips.</div>
+  </div>
+
+  <section id="cp-cards" class="cp-cards"></section>
+  <section id="cp-list" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden"></section>
+
+  <section class="cp-collapsible" style="margin-top:24px">
+    <div class="cp-collapsible-header">
+      <button class="cp-collapsible-toggle" id="cp-ranges-toggle">
+        <svg class="cp-ico cp-chevron open" id="cp-ranges-chevron" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        <svg class="cp-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-2)"><path d="m18 8 4 4-4 4"/><path d="m6 8-4 4 4 4"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/></svg>
+        <span style="font-weight:600;font-size:14px;color:var(--text)">Port ranges</span>
+        <span class="mono" style="font-size:12px;color:var(--text-3)">{{ port_ranges|length }}</span>
+      </button>
+      <button class="cp-btn cp-btn-ghost" style="height:28px;padding:0 11px;font-size:12px;flex:none" onclick="event.stopPropagation(); window.location.href='/ranges/add'">
+        <svg class="cp-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg>
+        Add range
+      </button>
+    </div>
+    <div class="cp-collapsible-body-wrap" id="cp-ranges-body-wrap">
+      <div class="cp-collapsible-body-inner">
+        <div style="border-top:1px solid var(--border)">
+          {% for name, range in port_ranges.items() %}
+          <div class="cp-range-row">
+            <span style="font-weight:500;font-size:13px;color:var(--text)">{{ name }}</span>
+            <span class="mono" style="font-size:12px;color:var(--text-2)">{{ range.start }} – {{ range.end }}</span>
+          </div>
+          {% endfor %}
         </div>
-
-        <h6 class="text-muted mt-3">GPU access</h6>
-        <div id="gpu-access" class="d-flex flex-wrap align-items-center" style="gap: 8px;">
-            <em class="text-muted small">Loading…</em>
-        </div>
+      </div>
     </div>
+  </section>
 </div>
-
-<div class="row mb-4">
-    <div class="col">
-        <h3>Registered Services</h3>
-    </div>
-    <div class="col-auto">
-        <a href="/ranges/add" class="btn btn-outline-secondary">Add Port Range</a>
-    </div>
-</div>
-
-<div id="services-list">
-{% if services %}
-<div class="row">
-    {% for service in services %}
-    <div class="col-lg-6 col-12">
-        <div class="card service-card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">{{ service.name }}</h5>
-                <div>
-                    {% if service.status == 'active' %}
-                    <a href="javascript:void(0)" class="open-service-link badge bg-primary" data-port="{{ service.port_status.actual_port or service.port }}" style="color: #ffffff; text-decoration: none">Open</a>
-                    <span class="badge bg-success">Running</span>
-                    {% else %}
-                    <span class="badge bg-danger">Stopped</span>
-                    {% endif %}
-
-                    {% if service.enabled %}
-                    <span class="badge bg-info">Auto-start</span>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="card-body" data-service="{{ service.name }}">
-                <p class="d-flex align-items-start">
-                    {% if service.status == 'active' %}
-                        <span class="port-toggle-container" style="display: inline-block; width: 12px; text-align: center; margin-right: 4px;">
-                            <span class="port-toggle" style="cursor: pointer; color: black; text-decoration: none; user-select: none;" title="Show port details">▶</span>
-                        </span>
-                    {% endif %}
-                    <span style="margin-right: 6px;"><strong>Port:</strong></span>
-                    <span style="flex: 1;">
-                        {% if service.port_status.validation == 'port_mismatch' %}
-                            <span title="Service running on port {{ service.port_status.actual_port }} but configured for {{ service.port_status.configured_port }}">{{ service.port_status.actual_port or service.port }}</span> <span class="text-warning" title="Port mismatch">*</span>
-                        {% elif service.port_status.validation == 'no_port_detected' or service.port_status.validation == 'unknown' %}
-                            <span title="No port detected">{{ service.port or 'None' }}</span> <span class="text-muted" title="No port detected">?</span>
-                        {% else %}
-                            {{ service.port_status.actual_port or service.port or 'None' }}
-                        {% endif %}
-                    </span>
-                </p>
-
-                {% if service.status == 'active' %}
-                <div class="port-details d-none" style="margin-left: 16px; margin-bottom: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; font-size: 0.9em;">
-                    <div class="port-detail-content" data-service="{{ service.name }}">
-                        <em>Loading port details...</em>
-                    </div>
-                </div>
-                {% endif %}
-                <p class="d-flex align-items-start">
-                    {% if service.command|length > 50 %}
-                        <span class="command-toggle-container" style="display: inline-block; width: 12px; text-align: center; margin-right: 4px;">
-                            <span class="command-toggle" style="cursor: pointer; color: black; text-decoration: none; user-select: none;" title="Toggle command display">▶</span>
-                        </span>
-                    {% endif %}
-                    <span style="margin-right: 6px;"><strong>Command:</strong></span>
-                    <span class="command-display" style="flex: 1; min-width: 0;">
-                        {% if service.command|length > 50 %}
-                            <span class="command-short">
-                                <code style="display: inline-block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top;">{{ service.command }}</code>
-                            </span>
-                            <span class="command-full d-none">
-                                <code style="display: inline-block; width: 100%; word-break: break-all; white-space: pre-wrap; vertical-align: top;">{{ service.command }}</code>
-                            </span>
-                        {% else %}
-                            <code>{{ service.command }}</code>
-                        {% endif %}
-                    </span>
-                </p>
-
-                <div class="btn-group">
-                    {% if service.status == 'active' %}
-                    <button type="button" class="btn btn-sm btn-warning btn-actions" data-service="{{ service.name }}" data-action="stop">Stop</button>
-                    <button type="button" class="btn btn-sm btn-primary btn-actions" data-service="{{ service.name }}" data-action="restart">Restart</button>
-                    {% else %}
-                    <button type="button" class="btn btn-sm btn-success btn-actions" data-service="{{ service.name }}" data-action="start">Start</button>
-                    {% endif %}
-
-                    {% if service.enabled %}
-                    <button type="button" class="btn btn-sm btn-outline-secondary btn-actions" data-service="{{ service.name }}" data-action="disable">Disable Auto-start</button>
-                    {% else %}
-                    <button type="button" class="btn btn-sm btn-outline-info btn-actions" data-service="{{ service.name }}" data-action="enable">Enable Auto-start</button>
-                    {% endif %}
-
-                    <a href="/logs/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Logs</a>
-                    <a href="/services/edit/{{ service.name }}" class="btn btn-sm btn-info btn-actions">Edit</a>
-                    <button type="button" class="btn btn-sm btn-danger btn-actions" data-service="{{ service.name }}" data-action="delete">Delete</button>
-                </div>
-                <div class="action-error text-danger small mt-2 d-none"></div>
-            </div>
-        </div>
-    </div>
-    {% endfor %}
-</div>
-{% else %}
-<div class="alert alert-info">
-    No services registered yet. <a href="/services/add" class="alert-link">Add a service</a> to get started.
-</div>
-{% endif %}
-</div>
-
-<div class="mt-5">
-    <h3>Port Ranges</h3>
-    <table class="table table-bordered">
-        <thead>
-            <tr>
-                <th>Range Name</th>
-                <th>Start Port</th>
-                <th>End Port</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for name, range in port_ranges.items() %}
-            <tr>
-                <td>{{ name }}</td>
-                <td>{{ range.start }}</td>
-                <td>{{ range.end }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/metrics.js"></script>
+<script src="/static/js/gpu-render.js"></script>
 <script src="/static/js/gpu.js"></script>
+<script src="/static/js/panel-actions.js"></script>
+<script src="/static/js/panel-cards.js"></script>
+<script src="/static/js/panel-list.js"></script>
+<script src="/static/js/panel.js"></script>
 {% endblock %}

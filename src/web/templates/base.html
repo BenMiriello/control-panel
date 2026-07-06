@@ -1,62 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Control Panel{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/static/css/metrics.css">
-    <style>
-        body {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }
-        .service-card {
-            margin-bottom: 1rem;
-        }
-        .status-active {
-            color: green;
-        }
-        .status-inactive {
-            color: red;
-        }
-        .btn-actions {
-            margin-right: 5px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Control Panel{% endblock %}</title>
+<script>
+(function() {
+  var stored = localStorage.getItem('panel-theme');
+  var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme || 'dark');
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/panel.css">
+<style>
+.cp-topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 14px;
+  height: 56px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 22px;
+}
+.cp-topbar-brand {
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; flex: none; color: inherit; text-decoration: none;
+}
+.cp-topbar-mark {
+  width: 22px; height: 22px; border-radius: 6px; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent-fg); font-weight: 700; font-size: 13px; font-family: var(--mono);
+}
+.cp-topbar-word { font-weight: 600; font-size: 14.5px; letter-spacing: -0.01em; }
+.cp-topbar-sub { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); padding-top: 1px; }
+.cp-topbar-summary {
+  display: flex; align-items: center; gap: 7px; margin-left: 2px;
+  padding-left: 16px; border-left: 1px solid var(--border);
+}
+.cp-topbar-summary-run { font-size: 12.5px; color: var(--text-2); }
+.cp-topbar-summary-run b { color: var(--text); font-weight: 600; }
+.cp-topbar-summary-total { font-size: 12.5px; color: var(--text-3); margin-left: 4px; }
+.cp-theme-btn {
+  width: 32px; height: 32px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  transition: color .12s ease, border-color .12s ease;
+}
+.cp-theme-btn:hover { color: var(--text); border-color: var(--border-strong); }
+[data-theme='dark'] .cp-sun { display: none; }
+[data-theme='light'] .cp-moon { display: none; }
+.cp-add-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+}
+@media (max-width: 680px) {
+  .cp-topbar { padding: 0 14px; }
+  .cp-topbar-sub, .cp-topbar-summary { display: none; }
+  .cp-add-btn { padding: 0; width: 32px; justify-content: center; }
+  .cp-add-label { display: none; }
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <header class="d-flex justify-content-between align-items-center pb-3 mb-4 border-bottom">
-            <h2>Control Panel</h2>
-            <nav>
-                <a href="/" class="btn btn-outline-primary me-2">Dashboard</a>
-                <a href="/services/add" class="btn btn-primary">Add Service</a>
-            </nav>
-        </header>
+<header class="cp-topbar">
+  <a href="/" class="cp-topbar-brand">
+    <div class="cp-topbar-mark">p</div>
+    <span class="cp-topbar-word">panel</span>
+    <span class="cp-topbar-sub">control&nbsp;panel</span>
+  </a>
 
+  <div class="cp-topbar-summary">
+    <span class="cp-dot cp-dot-running"></span>
+    <span class="cp-topbar-summary-run"><b id="cp-summary-running">0</b> running</span>
+    <span class="cp-topbar-summary-total">/ <span id="cp-summary-total">0</span> services</span>
+  </div>
 
-        <main>
-            {% block content %}{% endblock %}
-        </main>
+  <div style="flex:1"></div>
 
-        <footer class="pt-4 my-md-5 pt-md-5 border-top">
-            <div class="row">
-                <div class="col-12 col-md">
-                    <small class="d-block mb-3 text-muted">&copy; 2025 Control Panel</small>
-                </div>
-            </div>
-        </footer>
-    </div>
+  <button class="cp-theme-btn" title="Toggle dark / light" onclick="window.cpToggleTheme()">
+    <svg class="cp-ico cp-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+    <svg class="cp-ico cp-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+  </button>
 
-    <!-- Toast Container -->
-    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
-        <!-- Toasts will be inserted here dynamically -->
-    </div>
+  <a href="/services/add" class="cp-btn cp-btn-primary cp-add-btn">
+    <svg class="cp-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg>
+    <span class="cp-add-label">Add service</span>
+  </a>
+</header>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/static/js/metrics.js"></script>
-    <script src="/static/js/toast-manager.js"></script>
-    {% block scripts %}{% endblock %}
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<div class="cp-toasts" id="cp-toasts"></div>
+
+<script src="/static/js/panel-core.js"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

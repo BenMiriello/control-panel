@@ -5,7 +5,7 @@ import subprocess
 from flask import jsonify, redirect, render_template, request, url_for
 
 from core.config import load_config, save_config
-from core.service import get_service_port_status, get_service_status
+from core.services.listing import build_service_list
 
 
 def register_page_routes(app):
@@ -14,27 +14,7 @@ def register_page_routes(app):
     @app.route("/")
     def index():
         config = load_config()
-        services = []
-
-        for name, service in config["services"].items():
-            status, enabled = get_service_status(name)
-
-            # Get port status information
-            port_status = get_service_port_status(name)
-
-            services.append(
-                {
-                    "name": name,
-                    "port": service["port"],
-                    "command": service["command"],
-                    "status": status,
-                    "enabled": enabled,
-                    "port_status": port_status,
-                }
-            )
-
-        # Sort by name
-        services.sort(key=lambda x: x["name"])
+        services = build_service_list(config)
 
         # Get port ranges
         port_ranges = config.get("port_ranges", {})

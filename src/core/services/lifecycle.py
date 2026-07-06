@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from datetime import datetime
 from pathlib import Path
 import subprocess
 
@@ -39,6 +40,7 @@ def register_service(
         "working_dir": working_dir or str(Path.home()),
         "enabled": False,
         "env": {},
+        "last_started": None,
     }
 
     # Process environment variables
@@ -128,5 +130,9 @@ def control_service(name, action):
 
     if result.returncode != 0:
         return False, f"Failed to {action} service: {result.stderr}"
+
+    if action in ("start", "restart"):
+        config["services"][name]["last_started"] = datetime.now().isoformat()
+        save_config(config)
 
     return True, None

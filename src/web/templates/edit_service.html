@@ -3,59 +3,125 @@
 {% block title %}Control Panel - Edit Service{% endblock %}
 
 {% block content %}
-<h3>Edit Service: {{ service.name }}</h3>
+<style>
+.cp-form-page { max-width: 640px; margin: 0 auto; padding: 26px 22px 80px; }
+.cp-back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 12px 0 9px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-2); font: 500 12.5px var(--ui); cursor: pointer;
+  text-decoration: none; margin-bottom: 18px;
+}
+.cp-back-btn:hover { color: var(--text); }
+.cp-form-stack { display: flex; flex-direction: column; gap: 18px; }
+.cp-form-row { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+.cp-select-wrap { position: relative; }
+.cp-select-caret {
+  position: absolute; right: 12px; top: 13px; color: var(--text-3);
+  font-size: 10px; pointer-events: none;
+}
+.cp-radio-row { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+.cp-radio-card {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 11px 13px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.cp-radio-card.cp-radio-selected { border-color: var(--accent); background: var(--accent-soft); }
+.cp-radio-dot {
+  width: 15px; height: 15px; border-radius: 50%; flex: none; margin-top: 1px;
+  border: 1px solid var(--border-strong); background: var(--surface);
+}
+.cp-radio-selected .cp-radio-dot { border: 4px solid var(--accent); background: var(--surface); }
+.cp-radio-title { display: block; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.cp-radio-sub { font-size: 11px; color: var(--text-2); }
+.cp-form-footer {
+  display: flex; gap: 10px; margin-top: 6px; padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 680px) {
+  .cp-form-page { padding: 18px 14px 70px; }
+  .cp-form-row, .cp-radio-row { grid-template-columns: 1fr; }
+}
+</style>
 
-<form method="POST" action="/services/edit/{{ service.name }}">
-    <div class="mb-3">
-        <label for="name" class="form-label">Service Name</label>
-        <input type="text" class="form-control" id="name" name="name" value="{{ service.name }}" required pattern="[a-zA-Z0-9_-]+" maxlength="50">
-        <div class="form-text">Service name (letters, numbers, hyphens, underscores only). Changing this will rename the service.</div>
-    </div>
+<main class="cp-form-page">
+  <a href="/" class="cp-back-btn">
+    <svg class="cp-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+    Back
+  </a>
+  <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;letter-spacing:-0.02em">Edit {{ service.name }}</h1>
+  <p style="margin:0 0 24px;font-size:13.5px;color:var(--text-2)">Update configuration. Changing the name renames the systemd unit.</p>
 
-    <div class="mb-3">
-        <label for="command" class="form-label">Command</label>
-        <input type="text" class="form-control" id="command" name="command" value="{{ service.command }}" required>
-        <div class="form-text">The command to start the service (e.g., /path/to/script.sh or python /path/to/app.py)</div>
-    </div>
+  <form method="POST" action="/services/edit/{{ service.name }}">
+    <div class="cp-form-stack">
+      <div>
+        <label for="name" class="cp-label">Service name</label>
+        <input type="text" class="cp-input" id="name" name="name" value="{{ service.name }}" style="font-family:var(--mono)" required pattern="[a-zA-Z0-9_-]+" maxlength="50">
+        <div class="cp-help">Unique identifier — letters, numbers, hyphens, underscores. Changing this renames the systemd unit.</div>
+      </div>
 
-    <div class="mb-3">
-        <label for="port" class="form-label">Port</label>
-        <input type="number" class="form-control" id="port" name="port" min="1" max="65535"
-               value="{{ service.port_status.actual_port or service.port }}"
-               {% if service.port_status.port_management == 'auto_detect' %}disabled{% endif %}>
-        <small id="auto-detect-label" class="text-muted"
-               {% if service.port_status.port_management != 'auto_detect' %}style="display: none;"{% endif %}>(Auto-detected)</small>
+      <div>
+        <label for="command" class="cp-label">Command</label>
+        <input type="text" class="cp-input" id="command" name="command" value="{{ service.command }}" style="font-family:var(--mono)" required>
+        <div class="cp-help">Use absolute paths — systemd runs with a minimal PATH.</div>
+      </div>
 
-        <div style="margin-top: 8px;">
-            <div>
-                <input type="radio" id="mode_managed" name="port_mode" value="managed"
-                       {% if service.port_status.port_management == 'managed' %}checked{% endif %}>
-                <label for="mode_managed">Manual port</label>
-            </div>
-            <div>
-                <input type="radio" id="mode_auto_detect" name="port_mode" value="auto_detect"
-                       {% if service.port_status.port_management == 'auto_detect' %}checked{% endif %}>
-                <label for="mode_auto_detect">Auto-detect port</label>
-            </div>
+      <div class="cp-form-row">
+        <div>
+          <label for="port" class="cp-label cp-label-row">Port</label>
+          <input type="number" class="cp-input" id="port" name="port" min="1" max="65535" style="font-family:var(--mono)"
+                 value="{{ service.port_status.actual_port or service.port }}"
+                 {% if service.port_status.port_management == 'auto_detect' %}disabled{% endif %}>
+          <small id="auto-detect-label" class="cp-help"
+                 {% if service.port_status.port_management != 'auto_detect' %}style="display: none;"{% endif %}>(Auto-detected)</small>
         </div>
-    </div>
+      </div>
 
-    <div class="mb-3">
-        <label for="path" class="form-label">Path</label>
-        <input type="text" class="form-control" id="path" name="path" value="{{ service.working_dir }}">
-        <div class="form-text">Working directory path where the service should run</div>
-    </div>
+      <div>
+        <label class="cp-label">Port mode</label>
+        <div class="cp-radio-row">
+          <label class="cp-radio-card {% if service.port_status.port_management == 'managed' %}cp-radio-selected{% endif %}" id="card_managed">
+            <input type="radio" id="mode_managed" name="port_mode" value="managed"
+                   {% if service.port_status.port_management == 'managed' %}checked{% endif %}
+                   style="position:absolute;opacity:0;width:0;height:0">
+            <span class="cp-radio-dot"></span>
+            <span>
+              <span class="cp-radio-title">Manual</span>
+              <span class="cp-radio-sub">Use the port above</span>
+            </span>
+          </label>
+          <label class="cp-radio-card {% if service.port_status.port_management == 'auto_detect' %}cp-radio-selected{% endif %}" id="card_auto_detect">
+            <input type="radio" id="mode_auto_detect" name="port_mode" value="auto_detect"
+                   {% if service.port_status.port_management == 'auto_detect' %}checked{% endif %}
+                   style="position:absolute;opacity:0;width:0;height:0">
+            <span class="cp-radio-dot"></span>
+            <span>
+              <span class="cp-radio-title">Auto-detect</span>
+              <span class="cp-radio-sub">Discover from the process</span>
+            </span>
+          </label>
+        </div>
+      </div>
 
-    <div class="mb-3">
-        <label for="env_vars" class="form-label">Environment Variables</label>
-        <textarea class="form-control" id="env_vars" name="env_vars" rows="3">{% for key, value in service.env.items() %}{% if key != 'PORT' %}{{ key }}={{ value }}
+      <div>
+        <label for="path" class="cp-label">Working directory</label>
+        <input type="text" class="cp-input" id="path" name="path" value="{{ service.working_dir }}" style="font-family:var(--mono)">
+      </div>
+
+      <div>
+        <label for="env_vars" class="cp-label">Environment variables</label>
+        <textarea class="cp-textarea" id="env_vars" name="env_vars" rows="3" style="font-family:var(--mono)">{% for key, value in service.env.items() %}{% if key != 'PORT' %}{{ key }}={{ value }}
 {% endif %}{% endfor %}</textarea>
-        <div class="form-text">One variable per line in KEY=VALUE format (e.g., DEBUG=1)</div>
-    </div>
+        <div class="cp-help">One <span style="font-family:var(--mono)">KEY=VALUE</span> per line.</div>
+      </div>
 
-    <button type="submit" class="btn btn-primary">Update Service</button>
-    <a href="/" class="btn btn-secondary">Cancel</a>
-</form>
+      <div class="cp-form-footer">
+        <button type="submit" class="cp-btn cp-btn-primary">Save changes</button>
+        <a href="/" class="cp-btn cp-btn-secondary">Cancel</a>
+      </div>
+    </div>
+  </form>
+</main>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -63,15 +129,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const managedRadio = document.getElementById('mode_managed');
     const autoDetectRadio = document.getElementById('mode_auto_detect');
     const autoDetectLabel = document.getElementById('auto-detect-label');
+    const managedCard = document.getElementById('card_managed');
+    const autoDetectCard = document.getElementById('card_auto_detect');
 
     // Store original port value from server
     const originalPort = '{{ service.port }}';
 
-    // Simple radio button handling - just enable/disable field
     managedRadio.addEventListener('change', function() {
         if (this.checked) {
             portInput.disabled = false;
             autoDetectLabel.style.display = 'none';
+            managedCard.classList.add('cp-radio-selected');
+            autoDetectCard.classList.remove('cp-radio-selected');
             // Restore original managed port when switching back to manual
             portInput.value = originalPort;
         }
@@ -81,8 +150,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (this.checked) {
             portInput.disabled = true;
             autoDetectLabel.style.display = 'block';
+            autoDetectCard.classList.add('cp-radio-selected');
+            managedCard.classList.remove('cp-radio-selected');
             // Show detecting state immediately
-            const originalValue = portInput.value;
             portInput.value = 'Detecting...';
 
             const serviceName = '{{ service.name }}';

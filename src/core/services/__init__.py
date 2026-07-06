@@ -7,6 +7,7 @@ from .lifecycle import (
     register_service,
     unregister_service,
 )
+from .listing import build_service_list, sort_services
 from .ports import (
     check_service_running,
     detect_service_port,
@@ -36,4 +37,7 @@ __all__ = [
     "set_port_mode",
     # Utilities
     "rename_service",
+    # Listing
+    "build_service_list",
+    "sort_services",
 ]

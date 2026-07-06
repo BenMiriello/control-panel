@@ -1,55 +1,81 @@
-<!-- Metrics Widget -->
-<div class="metrics-widget">
-    <h4>System Metrics</h4>
-    <div class="metrics-container">
-        <!-- CPU Section -->
-        <div class="metric-group">
-            <div class="metric-item">
-                <div class="metric-label">
-                    CPU Usage <span id="cpu-usage-value" class="metric-value">0%</span>
-                </div>
-                <div class="progress">
-                    <div id="cpu-usage" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-            </div>
+<style>
+.cp-metrics {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+  grid-template-columns: repeat(4, 1fr);
+}
+@media (max-width: 680px) {
+  .cp-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.cp-metric-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 13px 15px;
+}
+.cp-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+.cp-metric-track {
+  height: 5px;
+  border-radius: 99px;
+  background: var(--surface-inset);
+  overflow: hidden;
+}
+.cp-metric-fill {
+  height: 100%;
+  border-radius: 99px;
+  width: 0;
+  transition: width .7s cubic-bezier(.4,0,.2,1);
+}
+.cp-metric-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+</style>
 
-            <!-- CPU Temperature -->
-            <div class="temperature-group" id="cpu-temp-container" style="display: none;">
-                <!-- CPU temperature items will be added here dynamically -->
-            </div>
-        </div>
-
-        <!-- Memory Section -->
-        <div class="metric-group">
-            <div class="metric-item">
-                <div class="metric-label">
-                    Memory Usage <span id="memory-usage-value" class="metric-value">0%</span>
-                </div>
-                <div class="progress">
-                    <div id="memory-usage" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-                <div class="text-muted small" id="memory-details">0 B / 0 B</div>
-            </div>
-        </div>
-
-        <!-- Disk Section -->
-        <div class="metric-group">
-            <div class="metric-item">
-                <div class="metric-label">
-                    Disk Usage <span id="disk-usage-value" class="metric-value">0%</span>
-                </div>
-                <div class="progress">
-                    <div id="disk-usage" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-                <div class="text-muted small" id="disk-details">0 B / 0 B</div>
-            </div>
-        </div>
-
-        <!-- GPU Section -->
-        <div class="metric-group" id="gpu-section" style="display: none;">
-            <div id="gpu-container">
-                <!-- GPU metrics will be added here dynamically -->
-            </div>
-        </div>
+<section class="cp-metrics">
+  <div class="cp-metric-tile" id="cpu-tile">
+    <div class="cp-metric-head">
+      <span class="cp-eyebrow">CPU</span>
+      <span class="mono" id="cpu-value" style="font-size:15px;font-weight:600;color:var(--text)">0%</span>
     </div>
-</div>
+    <div class="cp-metric-track"><div class="cp-metric-fill" id="cpu-bar"></div></div>
+    <div class="cp-metric-sub" id="cpu-sub"></div>
+  </div>
+
+  <div class="cp-metric-tile" id="memory-tile">
+    <div class="cp-metric-head">
+      <span class="cp-eyebrow">Memory</span>
+      <span class="mono" id="memory-value" style="font-size:15px;font-weight:600;color:var(--text)">0%</span>
+    </div>
+    <div class="cp-metric-track"><div class="cp-metric-fill" id="memory-bar"></div></div>
+    <div class="cp-metric-sub" id="memory-sub"></div>
+  </div>
+
+  <div class="cp-metric-tile" id="disk-tile">
+    <div class="cp-metric-head">
+      <span class="cp-eyebrow">Disk</span>
+      <span class="mono" id="disk-value" style="font-size:15px;font-weight:600;color:var(--text)">0%</span>
+    </div>
+    <div class="cp-metric-track"><div class="cp-metric-fill" id="disk-bar"></div></div>
+    <div class="cp-metric-sub" id="disk-sub"></div>
+  </div>
+
+  <div class="cp-metric-tile" id="gpu-tile" style="display:none">
+    <div class="cp-metric-head">
+      <span class="cp-eyebrow">GPU</span>
+      <span class="mono" id="gpu-value" style="font-size:15px;font-weight:600;color:var(--text)">0%</span>
+    </div>
+    <div class="cp-metric-track"><div class="cp-metric-fill" id="gpu-bar"></div></div>
+    <div class="cp-metric-sub" id="gpu-sub"></div>
+  </div>
+</section>

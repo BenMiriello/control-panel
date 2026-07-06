@@ -20,6 +20,8 @@ coordinate through it), this is the single place to update.
 import os
 import subprocess
 
+from . import waiters as _waiters
+
 # Control Panel is a compliant consumer of the standalone gpu-broker (see
 # ~/Documents/gpu-broker). The broker's authority lives in Redis keys, so we
 # observe/clear by reading those keys directly via redis-cli — matching how the
@@ -45,6 +47,7 @@ _NAMESPACES = {
         "bg_pending": "gpu:bg_pending",
         "activity_hint": "gpu:activity_hint",
         "disabled": "gpu:disabled",
+        "waiters": "gpu:waiters",
     },
     "intergen:gpu": {
         "holder": "intergen:gpu:holder",
@@ -53,6 +56,7 @@ _NAMESPACES = {
         "bg_pending": "intergen:gpu:bg_lease_count",
         "activity_hint": "intergen:user_activity_hint",
         "disabled": "intergen:gpu:disabled",
+        "waiters": "intergen:gpu:waiters",
     },
 }
 # Preference order: neutral shared namespace wins over legacy intergen.
@@ -166,7 +170,7 @@ def get_lease_state():
     """
     k = _keys()
     if k is None:
-        return {"reachable": False}
+        return {"reachable": False, "waiters": [], "waiters_unaccounted": 0}
 
     holder = _redis("get", k["holder"]) or None
     ttl = _int_or_none(_redis("ttl", k["holder"]))
@@ -191,28 +195,40 @@ def get_lease_state():
         "hold_remaining_s": None,
         "epoch": None,
     }
-    if not holder:
-        return state
+    if holder:
+        parsed = _parse_lease_id(holder)
+        state["kind"] = parsed.get("kind")
+        state["priority"] = parsed.get("priority")
+        state["holder_name"] = parsed.get("holder")
 
-    parsed = _parse_lease_id(holder)
-    state["kind"] = parsed.get("kind")
-    state["priority"] = parsed.get("priority")
-    state["holder_name"] = parsed.get("holder")
+        meta = _redis("hgetall", k["lease_meta"])
+        if meta:
+            lines = meta.split("\n")
+            fields = {
+                lines[i].strip(): lines[i + 1].strip()
+                for i in range(0, len(lines) - 1, 2)
+            }
+            # Only trust meta that describes the CURRENT holder.
+            if fields.get("lease_id") == holder:
+                state["consumer"] = fields.get("consumer")
+                state["priority"] = fields.get("priority") or state["priority"]
+                state["epoch"] = _int_or_none(fields.get("epoch"))
+                hold_until = _float_or_none(fields.get("hold_until"))
+                if hold_until is not None:
+                    state["hold_remaining_s"] = int(hold_until - _now())
 
-    meta = _redis("hgetall", k["lease_meta"])
-    if meta:
-        lines = meta.split("\n")
-        fields = {
-            lines[i].strip(): lines[i + 1].strip() for i in range(0, len(lines) - 1, 2)
-        }
-        # Only trust meta that describes the CURRENT holder.
-        if fields.get("lease_id") == holder:
-            state["consumer"] = fields.get("consumer")
-            state["priority"] = fields.get("priority") or state["priority"]
-            state["epoch"] = _int_or_none(fields.get("epoch"))
-            hold_until = _float_or_none(fields.get("hold_until"))
-            if hold_until is not None:
-                state["hold_remaining_s"] = int(hold_until - _now())
+    waiter_list, unaccounted = _waiters.get_waiters(
+        _redis,
+        _parse_lease_id,
+        _now(),
+        k["waiters"],
+        holder,
+        state["priority"],
+        user_pending,
+        bg_pending,
+    )
+    state["waiters"] = waiter_list
+    state["waiters_unaccounted"] = unaccounted
     return state
 
 
@@ -232,6 +248,7 @@ def clear_lease():
         k["user_pending"],
         k["bg_pending"],
         k["activity_hint"],
+        k["waiters"],
     ]
     return _redis("del", *clearable) is not None
 

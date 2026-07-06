@@ -3,52 +3,141 @@
 {% block title %}Control Panel - {{ name }} Logs{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3>Logs for {{ name }}</h3>
-    <a href="/" class="btn btn-outline-primary">Back to Dashboard</a>
+<div style="max-width:1000px;margin:0 auto;padding:26px 22px 80px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+    <a href="/" class="cp-btn cp-btn-ghost" style="padding-left:9px">
+      <svg class="cp-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7M19 12H5"/></svg>Back
+    </a>
+    <div style="display:flex;align-items:center;gap:9px;min-width:0">
+      <span class="cp-dot cp-dot-running"></span>
+      <h1 id="logs-name" style="margin:0;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ name }}</h1>
+      <span class="mono cp-logs-sub" style="font-size:12px;color:var(--text-3)">journalctl · last 100 lines</span>
+    </div>
+    <div style="flex:1"></div>
+    <button id="logs-autorefresh" class="cp-btn cp-btn-ghost" type="button">
+      <span id="logs-autorefresh-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-3);flex:none"></span>
+      <span id="logs-autorefresh-label">Auto-refresh</span>
+    </button>
+    <button id="logs-copy" class="cp-btn cp-btn-ghost" type="button">
+      <svg class="cp-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>Copy
+    </button>
+  </div>
+  <div style="background:var(--surface-inset);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+    <div id="logs-view" class="mono" style="padding:14px 16px;font-size:12.5px;line-height:1.75;max-height:560px;overflow:auto"></div>
+  </div>
+  <pre id="logs-raw" hidden>{{ logs }}</pre>
 </div>
 
-<div class="card">
-    <div class="card-header">
-        <div class="d-flex justify-content-between align-items-center">
-            <span>Recent Logs</span>
-            <button id="auto-refresh" class="btn btn-sm btn-outline-secondary">Auto Refresh</button>
-        </div>
-    </div>
-    <div class="card-body">
-        <pre id="logs-container" class="bg-dark text-light p-3" style="max-height: 600px; overflow-y: auto;">{{ logs }}</pre>
-    </div>
-</div>
+<style>
+@media (max-width: 680px) {
+  .cp-logs-sub { display: none; }
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    let autoRefresh = false;
-    let refreshInterval;
+(function() {
+  var LEVEL_COLORS = {
+    INFO: 'var(--text-3)',
+    WARN: 'var(--amber)',
+    WARNING: 'var(--amber)',
+    ERROR: 'var(--red)',
+    ERR: 'var(--red)'
+  };
 
-    document.getElementById('auto-refresh').addEventListener('click', function() {
-        autoRefresh = !autoRefresh;
-        this.classList.toggle('btn-outline-secondary');
-        this.classList.toggle('btn-success');
+  function escapeHtml(s) {
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
 
-        if (autoRefresh) {
-            this.textContent = 'Auto Refresh: ON';
-            refreshInterval = setInterval(refreshLogs, 3000);
-        } else {
-            this.textContent = 'Auto Refresh';
-            clearInterval(refreshInterval);
-        }
-    });
-
-    function refreshLogs() {
-        fetch(window.location.href)
-            .then(response => response.text())
-            .then(html => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const newLogs = doc.getElementById('logs-container').textContent;
-                document.getElementById('logs-container').textContent = newLogs;
-            });
+  function parseLine(line) {
+    var parts = line.split(/\s+/);
+    if (parts.length < 4) return null;
+    var time = parts.slice(0, 3).join(' ');
+    var rest = line.slice(line.indexOf(parts[3]));
+    var sepIdx = rest.indexOf(': ');
+    var msg = sepIdx !== -1 ? rest.slice(sepIdx + 2) : rest;
+    var levelMatch = msg.match(/\b(INFO|WARN|WARNING|ERROR|ERR)\b/i);
+    var level = levelMatch ? levelMatch[1].toUpperCase() : '';
+    var color = 'var(--text-2)';
+    if (/startup complete/i.test(msg)) {
+      color = 'var(--green)';
+    } else if (level && LEVEL_COLORS[level]) {
+      color = LEVEL_COLORS[level];
     }
+    return { time: time, level: level, color: color, msg: msg };
+  }
+
+  function renderLogs(raw) {
+    var container = document.getElementById('logs-view');
+    var lines = raw.split('\n');
+    var html = '';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line === '' && i === lines.length - 1) continue;
+      var parsed = null;
+      try {
+        parsed = parseLine(line);
+      } catch (e) {
+        parsed = null;
+      }
+      if (parsed) {
+        html += '<div style="display:flex;gap:14px;white-space:pre-wrap">'
+          + '<span style="color:var(--text-3);flex:none">' + escapeHtml(parsed.time) + '</span>'
+          + '<span style="flex:none;width:46px;color:' + parsed.color + '">' + escapeHtml(parsed.level) + '</span>'
+          + '<span style="color:var(--text-2)">' + escapeHtml(parsed.msg) + '</span>'
+          + '</div>';
+      } else {
+        html += '<div style="white-space:pre-wrap;color:var(--text-2)">' + escapeHtml(line) + '</div>';
+      }
+    }
+    container.innerHTML = html;
+  }
+
+  function currentRaw() {
+    return document.getElementById('logs-raw').textContent;
+  }
+
+  renderLogs(currentRaw());
+
+  var autoRefresh = false;
+  var refreshInterval;
+  var toggleBtn = document.getElementById('logs-autorefresh');
+  var toggleDot = document.getElementById('logs-autorefresh-dot');
+  var toggleLabel = document.getElementById('logs-autorefresh-label');
+
+  function refreshLogs() {
+    fetch(window.location.href)
+      .then(function(response) { return response.text(); })
+      .then(function(html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var newRaw = doc.getElementById('logs-raw').textContent;
+        document.getElementById('logs-raw').textContent = newRaw;
+        renderLogs(newRaw);
+      });
+  }
+
+  toggleBtn.addEventListener('click', function() {
+    autoRefresh = !autoRefresh;
+    if (autoRefresh) {
+      toggleDot.style.background = 'var(--green)';
+      toggleLabel.textContent = 'Auto-refresh: ON';
+      refreshInterval = setInterval(refreshLogs, 3000);
+    } else {
+      toggleDot.style.background = 'var(--text-3)';
+      toggleLabel.textContent = 'Auto-refresh';
+      clearInterval(refreshInterval);
+    }
+  });
+
+  document.getElementById('logs-copy').addEventListener('click', function() {
+    navigator.clipboard.writeText(currentRaw()).then(function() {
+      if (window.cpToast) window.cpToast('Logs copied', 'ok');
+    });
+  });
+})();
 </script>
 {% endblock %}

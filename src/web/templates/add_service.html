@@ -3,49 +3,94 @@
 {% block title %}Control Panel - Add Service{% endblock %}
 
 {% block content %}
-<h3>Add New Service</h3>
+<style>
+.cp-form-page { max-width: 640px; margin: 0 auto; padding: 26px 22px 80px; }
+.cp-back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 12px 0 9px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-2); font: 500 12.5px var(--ui); cursor: pointer;
+  text-decoration: none; margin-bottom: 18px;
+}
+.cp-back-btn:hover { color: var(--text); }
+.cp-form-stack { display: flex; flex-direction: column; gap: 18px; }
+.cp-form-row { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+.cp-select-wrap { position: relative; }
+.cp-select-caret {
+  position: absolute; right: 12px; top: 13px; color: var(--text-3);
+  font-size: 10px; pointer-events: none;
+}
+.cp-label-row { display: flex; align-items: center; gap: 5px; }
+.cp-form-footer {
+  display: flex; gap: 10px; margin-top: 6px; padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 680px) {
+  .cp-form-page { padding: 18px 14px 70px; }
+  .cp-form-row { grid-template-columns: 1fr; }
+}
+</style>
 
-<form method="POST" action="/services/add">
-    <div class="mb-3">
-        <label for="name" class="form-label">Service Name</label>
-        <input type="text" class="form-control" id="name" name="name" required>
-        <div class="form-text">A unique identifier for the service (e.g., comfyui, nginx)</div>
+<main class="cp-form-page">
+  <a href="/" class="cp-back-btn">
+    <svg class="cp-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+    Back
+  </a>
+  <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;letter-spacing:-0.02em">Add service</h1>
+  <p style="margin:0 0 24px;font-size:13.5px;color:var(--text-2)">Register a new service. It will be managed under a systemd unit.</p>
+
+  <form method="POST" action="/services/add">
+    <div class="cp-form-stack">
+      <div>
+        <label for="name" class="cp-label">Service name</label>
+        <input type="text" class="cp-input" id="name" name="name" placeholder="my-app" style="font-family:var(--mono)" required>
+        <div class="cp-help">Unique identifier — letters, numbers, hyphens, underscores.</div>
+      </div>
+
+      <div>
+        <label for="command" class="cp-label">Command</label>
+        <input type="text" class="cp-input" id="command" name="command" placeholder="/path/to/venv/bin/python app.py" style="font-family:var(--mono)" required>
+        <div class="cp-help">Use absolute paths — systemd runs with a minimal PATH.</div>
+      </div>
+
+      <div class="cp-form-row">
+        <div>
+          <label for="port" class="cp-label cp-label-row">
+            Port
+            <span class="cp-info" title="Leave empty to auto-assign from the selected range">i</span>
+          </label>
+          <input type="number" class="cp-input" id="port" name="port" min="1" max="65535" placeholder="auto" style="font-family:var(--mono)">
+        </div>
+        <div>
+          <label for="range" class="cp-label">Port range</label>
+          <div class="cp-select-wrap">
+            <select class="cp-select" id="range" name="range">
+              {% for name, range in port_ranges.items() %}
+              <option value="{{ name }}">{{ name }} ({{ range.start }}-{{ range.end }})</option>
+              {% endfor %}
+            </select>
+            <span class="cp-select-caret">&#9662;</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label for="directory" class="cp-label">Working directory</label>
+        <input type="text" class="cp-input" id="directory" name="directory" placeholder="~/ (home directory)" style="font-family:var(--mono)">
+        <div class="cp-help">Leave empty to use your home directory</div>
+      </div>
+
+      <div>
+        <label for="env_vars" class="cp-label">Environment variables</label>
+        <textarea class="cp-textarea" id="env_vars" name="env_vars" rows="3" placeholder="DEBUG=1&#10;LOG_LEVEL=info" style="font-family:var(--mono)"></textarea>
+        <div class="cp-help">One <span style="font-family:var(--mono)">KEY=VALUE</span> per line.</div>
+      </div>
+
+      <div class="cp-form-footer">
+        <button type="submit" class="cp-btn cp-btn-primary">Register service</button>
+        <a href="/" class="cp-btn cp-btn-secondary">Cancel</a>
+      </div>
     </div>
-
-    <div class="mb-3">
-        <label for="command" class="form-label">Command</label>
-        <input type="text" class="form-control" id="command" name="command" required>
-        <div class="form-text">The command to start the service (e.g., /path/to/script.sh or python /path/to/app.py)</div>
-    </div>
-
-    <div class="mb-3">
-        <label for="port" class="form-label">Port (Optional)</label>
-        <input type="number" class="form-control" id="port" name="port" min="1" max="65535">
-        <div class="form-text">Leave empty for auto-assignment based on selected port range</div>
-    </div>
-
-    <div class="mb-3">
-        <label for="directory" class="form-label">Working Directory (Optional)</label>
-        <input type="text" class="form-control" id="directory" name="directory">
-        <div class="form-text">Leave empty to use your home directory</div>
-    </div>
-
-    <div class="mb-3">
-        <label for="range" class="form-label">Port Range (for auto-assignment)</label>
-        <select class="form-select" id="range" name="range">
-            {% for name, range in port_ranges.items() %}
-            <option value="{{ name }}">{{ name }} ({{ range.start }}-{{ range.end }})</option>
-            {% endfor %}
-        </select>
-    </div>
-
-    <div class="mb-3">
-        <label for="env_vars" class="form-label">Environment Variables (Optional)</label>
-        <textarea class="form-control" id="env_vars" name="env_vars" rows="3"></textarea>
-        <div class="form-text">One variable per line in KEY=VALUE format (e.g., DEBUG=1)</div>
-    </div>
-
-    <button type="submit" class="btn btn-primary">Register Service</button>
-    <a href="/" class="btn btn-secondary">Cancel</a>
-</form>
+  </form>
+</main>
 {% endblock %}

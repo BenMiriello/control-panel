@@ -24,89 +24,66 @@ def register_service_routes(app):
         if action in ["start", "stop", "restart"]:
             success, error = control_service(name, action)
             if not success:
-                return redirect(
-                    url_for(
-                        "index",
-                        action=action,
-                        service=name,
-                        status="error",
-                        message=error,
-                    )
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "service": name,
+                            "action": action,
+                            "error": error,
+                        }
+                    ),
+                    400,
                 )
-        elif action == "enable":
+        elif action in ["enable", "disable"]:
             config = load_config()
             if name not in config["services"]:
-                return redirect(
-                    url_for(
-                        "index",
-                        action=action,
-                        service=name,
-                        status="error",
-                        message=f"Service '{name}' not found",
-                    )
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "service": name,
+                            "action": action,
+                            "error": f"Service '{name}' not found",
+                        }
+                    ),
+                    404,
                 )
 
             result = subprocess.run(
-                ["systemctl", "--user", "enable", f"control-panel@{name}.service"],
+                ["systemctl", "--user", action, f"control-panel@{name}.service"],
                 capture_output=True,
                 text=True,
             )
             if result.returncode != 0:
-                return redirect(
-                    url_for(
-                        "index",
-                        action=action,
-                        service=name,
-                        status="error",
-                        message=result.stderr,
-                    )
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "service": name,
+                            "action": action,
+                            "error": result.stderr,
+                        }
+                    ),
+                    400,
                 )
 
-            config["services"][name]["enabled"] = True
-            save_config(config)
-        elif action == "disable":
-            config = load_config()
-            if name not in config["services"]:
-                return redirect(
-                    url_for(
-                        "index",
-                        action=action,
-                        service=name,
-                        status="error",
-                        message=f"Service '{name}' not found",
-                    )
-                )
-
-            result = subprocess.run(
-                ["systemctl", "--user", "disable", f"control-panel@{name}.service"],
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                return redirect(
-                    url_for(
-                        "index",
-                        action=action,
-                        service=name,
-                        status="error",
-                        message=result.stderr,
-                    )
-                )
-
-            config["services"][name]["enabled"] = False
+            config["services"][name]["enabled"] = action == "enable"
             save_config(config)
         else:
-            return redirect(
-                url_for(
-                    "index",
-                    action=action,
-                    service=name,
-                    status="error",
-                    message=f"Unknown action: {action}",
-                )
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "service": name,
+                        "action": action,
+                        "error": f"Unknown action: {action}",
+                    }
+                ),
+                400,
             )
 
-        return redirect(url_for("index", action=action, service=name, status="success"))
+        return jsonify({"success": True, "service": name, "action": action})
 
     @app.route("/services/add", methods=["GET", "POST"])
     def add_service():
@@ -162,19 +139,19 @@ def register_service_routes(app):
     def delete_service(name):
         success, error = unregister_service(name)
         if not success:
-            return redirect(
-                url_for(
-                    "index",
-                    action="delete",
-                    service=name,
-                    status="error",
-                    message=error,
-                )
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "service": name,
+                        "action": "delete",
+                        "error": error,
+                    }
+                ),
+                400,
             )
 
-        return redirect(
-            url_for("index", action="delete", service=name, status="success")
-        )
+        return jsonify({"success": True, "service": name, "action": "delete"})
 
     @app.route("/services/edit/<name>", methods=["GET", "POST"])
     def edit_service(name):
@@ -334,18 +311,6 @@ def register_service_routes(app):
         service_with_name["port_status"] = port_status
 
         return render_template("edit_service.html", service=service_with_name)
-
-    @app.route("/api/services/<name>/detect-port")
-    def api_detect_port(name):
-        """API endpoint to detect port for a service"""
-        try:
-            detected_port = detect_service_port(name)
-            if detected_port:
-                return jsonify({"success": True, "port": detected_port})
-            else:
-                return jsonify({"success": False, "error": "No port detected"})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)})
 
     @app.route("/api/services/<name>/port-details")
     def api_port_details(name):

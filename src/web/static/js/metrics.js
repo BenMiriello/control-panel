@@ -45,163 +45,54 @@ class MetricsWidget {
      * Update UI with current metrics
      */
     updateUI(data) {
-        // CPU Usage
-        this.updateProgressBar('cpu-usage', data.cpu.usage);
-        document.getElementById('cpu-usage-value').textContent = `${data.cpu.usage.toFixed(1)}%`;
+        this.updateTile('cpu', data.cpu.usage, this.hottestSensor(data.cpu.temperature));
+        this.updateTile('memory', data.memory.percent,
+            `${this.formatBytes(data.memory.used)} / ${this.formatBytes(data.memory.total)}`);
+        this.updateTile('disk', data.disk.percent,
+            `${this.formatBytes(data.disk.used)} / ${this.formatBytes(data.disk.total)}`);
 
-        // Memory Usage
-        this.updateProgressBar('memory-usage', data.memory.percent);
-        document.getElementById('memory-usage-value').textContent = `${data.memory.percent.toFixed(1)}%`;
-        document.getElementById('memory-details').textContent =
-            `${this.formatBytes(data.memory.used)} / ${this.formatBytes(data.memory.total)}`;
-
-        // Disk Usage
-        this.updateProgressBar('disk-usage', data.disk.percent);
-        document.getElementById('disk-usage-value').textContent = `${data.disk.percent.toFixed(1)}%`;
-        document.getElementById('disk-details').textContent =
-            `${this.formatBytes(data.disk.used)} / ${this.formatBytes(data.disk.total)}`;
-
-        // GPU Information (if available)
-        const gpuSection = document.getElementById('gpu-section');
+        const gpuTile = document.getElementById('gpu-tile');
         if (data.gpu.available && data.gpu.gpus.length > 0) {
-            gpuSection.style.display = 'block';
-
-            // Update each GPU
-            data.gpu.gpus.forEach((gpu, index) => {
-                const gpuId = `gpu-${index}`;
-
-                // Create elements if they don't exist
-                if (!document.getElementById(gpuId)) {
-                    this.createGpuElements(index);
-                }
-
-                // Update values
-                this.updateProgressBar(`${gpuId}-usage`, gpu.util_percent);
-                document.getElementById(`${gpuId}-usage-value`).textContent = `${gpu.util_percent.toFixed(1)}%`;
-
-                this.updateProgressBar(`${gpuId}-memory`, (gpu.memory_used / gpu.memory_total) * 100);
-                document.getElementById(`${gpuId}-memory-value`).textContent =
-                    `${this.formatBytes(gpu.memory_used * 1024 * 1024)} / ${this.formatBytes(gpu.memory_total * 1024 * 1024)}`;
-
-                const tempElement = document.getElementById(`${gpuId}-temp`);
-                tempElement.textContent = `${gpu.temperature.toFixed(1)}°C`;
-                this.updateTemperatureClass(tempElement, gpu.temperature);
-            });
+            gpuTile.style.display = '';
+            const gpu = data.gpu.gpus[0];
+            this.updateTile('gpu', gpu.util_percent, `${gpu.temperature.toFixed(0)}°C`);
         } else {
-            gpuSection.style.display = 'none';
-        }
-
-        // CPU Temperature (if available)
-        const cpuTempContainer = document.getElementById('cpu-temp-container');
-        if (data.cpu.temperature.available && data.cpu.temperature.sensors.length > 0) {
-            cpuTempContainer.style.display = 'block';
-            cpuTempContainer.innerHTML = ''; // Clear previous entries
-
-            // Sort sensors by temperature (highest first)
-            const sortedSensors = [...data.cpu.temperature.sensors].sort((a, b) => b.temp - a.temp);
-
-            // Display up to 3 sensors with highest temps
-            const sensorsToShow = sortedSensors.slice(0, 3);
-            sensorsToShow.forEach(sensor => {
-                const tempItem = document.createElement('div');
-                tempItem.className = 'temperature-item';
-
-                const label = document.createElement('span');
-                label.className = 'temperature-label';
-                label.textContent = sensor.type || sensor.zone;
-
-                const value = document.createElement('span');
-                value.className = 'temperature-value';
-                value.textContent = `${sensor.temp.toFixed(1)}°C`;
-                this.updateTemperatureClass(value, sensor.temp);
-
-                tempItem.appendChild(label);
-                tempItem.appendChild(value);
-                cpuTempContainer.appendChild(tempItem);
-            });
-        } else {
-            cpuTempContainer.style.display = 'none';
+            gpuTile.style.display = 'none';
         }
     }
 
     /**
-     * Update a progress bar with the given value
+     * Format the hottest CPU sensor reading, or an empty string if unavailable
      */
-    updateProgressBar(id, value) {
-        const progressBar = document.getElementById(id);
-        if (progressBar) {
-            progressBar.style.width = `${value}%`;
-            progressBar.setAttribute('aria-valuenow', value);
-
-            // Update color based on value
-            progressBar.className = 'progress-bar';
-            if (value < 50) {
-                progressBar.classList.add('bg-success');
-            } else if (value < 80) {
-                progressBar.classList.add('bg-warning');
-            } else {
-                progressBar.classList.add('bg-danger');
-            }
+    hottestSensor(temperature) {
+        if (!temperature.available || temperature.sensors.length === 0) {
+            return '';
         }
+        const hottest = temperature.sensors.reduce((a, b) => (b.temp > a.temp ? b : a));
+        return `${hottest.temp.toFixed(0)}°C`;
     }
 
     /**
-     * Create UI elements for a GPU
+     * Update a metric tile's value, bar width/color, and sub-detail text
      */
-    createGpuElements(index) {
-        const gpuContainer = document.getElementById('gpu-container');
-        const gpuId = `gpu-${index}`;
+    updateTile(prefix, percent, sub) {
+        const value = document.getElementById(`${prefix}-value`);
+        const bar = document.getElementById(`${prefix}-bar`);
+        const subEl = document.getElementById(`${prefix}-sub`);
 
-        const gpuSection = document.createElement('div');
-        gpuSection.className = 'metric-item';
-        gpuSection.id = gpuId;
-
-        // GPU Usage
-        const usageLabel = document.createElement('div');
-        usageLabel.className = 'metric-label';
-        usageLabel.innerHTML = `GPU ${index} Usage <span id="${gpuId}-usage-value" class="metric-value">0%</span>`;
-
-        const usageProgress = document.createElement('div');
-        usageProgress.className = 'progress';
-        usageProgress.innerHTML = `<div id="${gpuId}-usage" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>`;
-
-        // GPU Memory
-        const memoryLabel = document.createElement('div');
-        memoryLabel.className = 'metric-label';
-        memoryLabel.innerHTML = `VRAM <span id="${gpuId}-memory-value" class="metric-value">0 MB / 0 MB</span>`;
-
-        const memoryProgress = document.createElement('div');
-        memoryProgress.className = 'progress';
-        memoryProgress.innerHTML = `<div id="${gpuId}-memory" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>`;
-
-        // GPU Temperature
-        const tempItem = document.createElement('div');
-        tempItem.className = 'temperature-item';
-        tempItem.innerHTML = `<span class="temperature-label">Temperature</span><span id="${gpuId}-temp" class="temperature-value temp-normal">0°C</span>`;
-
-        // Add all elements to the container
-        gpuSection.appendChild(usageLabel);
-        gpuSection.appendChild(usageProgress);
-        gpuSection.appendChild(memoryLabel);
-        gpuSection.appendChild(memoryProgress);
-        gpuSection.appendChild(tempItem);
-
-        gpuContainer.appendChild(gpuSection);
+        value.textContent = `${percent.toFixed(0)}%`;
+        bar.style.width = `${percent}%`;
+        bar.style.background = this.thresholdColor(percent);
+        subEl.textContent = sub;
     }
 
     /**
-     * Update temperature element class based on value
+     * Map a percentage to its threshold color CSS variable
      */
-    updateTemperatureClass(element, temperature) {
-        element.classList.remove('temp-normal', 'temp-warning', 'temp-danger');
-
-        if (temperature < 60) {
-            element.classList.add('temp-normal');
-        } else if (temperature < 80) {
-            element.classList.add('temp-warning');
-        } else {
-            element.classList.add('temp-danger');
-        }
+    thresholdColor(percent) {
+        if (percent >= 90) return 'var(--red)';
+        if (percent >= 70) return 'var(--amber)';
+        return 'var(--green)';
     }
 
     /**

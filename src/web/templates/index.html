@@ -5,6 +5,30 @@
 {% block content %}
 {% include 'metrics_widget.html' %}
 
+<div class="card mb-4" id="gpu-panel" style="display: none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">GPU</h4>
+        <span id="gpu-vram-summary" class="text-muted small"></span>
+    </div>
+    <div class="card-body">
+        <div id="gpu-unmanaged-warning" class="alert alert-warning py-2 d-none" role="alert"></div>
+
+        <h6 class="text-muted">On the card</h6>
+        <div id="gpu-processes"><em class="text-muted small">Loading…</em></div>
+
+        <h6 class="text-muted mt-3">Broker lease</h6>
+        <div class="d-flex justify-content-between align-items-center">
+            <div id="gpu-broker" class="flex-grow-1"><em class="text-muted small">Loading…</em></div>
+            <button type="button" id="gpu-clear-btn" class="btn btn-sm btn-outline-danger ms-2" style="display: none;">Clear stuck lease</button>
+        </div>
+
+        <h6 class="text-muted mt-3">GPU access</h6>
+        <div id="gpu-access" class="d-flex flex-wrap align-items-center" style="gap: 8px;">
+            <em class="text-muted small">Loading…</em>
+        </div>
+    </div>
+</div>
+
 <div class="row mb-4">
     <div class="col">
         <h3>Registered Services</h3>
@@ -14,6 +38,7 @@
     </div>
 </div>
 
+<div id="services-list">
 {% if services %}
 <div class="row">
     {% for service in services %}
@@ -23,7 +48,7 @@
                 <h5 class="mb-0">{{ service.name }}</h5>
                 <div>
                     {% if service.status == 'active' %}
-		    <a href="javascript:void(0)" onclick="window.open('http://'+window.location.hostname+':{{ service.port }}', '_blank')" class="badge bg-primary" style="color: #ffffff; text-decoration: none">Open</a>
+                    <a href="javascript:void(0)" class="open-service-link badge bg-primary" data-port="{{ service.port_status.actual_port or service.port }}" style="color: #ffffff; text-decoration: none">Open</a>
                     <span class="badge bg-success">Running</span>
                     {% else %}
                     <span class="badge bg-danger">Stopped</span>
@@ -34,7 +59,7 @@
                     {% endif %}
                 </div>
             </div>
-            <div class="card-body">
+            <div class="card-body" data-service="{{ service.name }}">
                 <p class="d-flex align-items-start">
                     {% if service.status == 'active' %}
                         <span class="port-toggle-container" style="display: inline-block; width: 12px; text-align: center; margin-right: 4px;">
@@ -83,22 +108,23 @@
 
                 <div class="btn-group">
                     {% if service.status == 'active' %}
-                    <a href="/services/control/{{ service.name }}/stop" class="btn btn-sm btn-warning btn-actions">Stop</a>
-                    <a href="/services/control/{{ service.name }}/restart" class="btn btn-sm btn-primary btn-actions">Restart</a>
+                    <button type="button" class="btn btn-sm btn-warning btn-actions" data-service="{{ service.name }}" data-action="stop">Stop</button>
+                    <button type="button" class="btn btn-sm btn-primary btn-actions" data-service="{{ service.name }}" data-action="restart">Restart</button>
                     {% else %}
-                    <a href="/services/control/{{ service.name }}/start" class="btn btn-sm btn-success btn-actions">Start</a>
+                    <button type="button" class="btn btn-sm btn-success btn-actions" data-service="{{ service.name }}" data-action="start">Start</button>
                     {% endif %}
 
                     {% if service.enabled %}
-                    <a href="/services/control/{{ service.name }}/disable" class="btn btn-sm btn-outline-secondary btn-actions">Disable Auto-start</a>
+                    <button type="button" class="btn btn-sm btn-outline-secondary btn-actions" data-service="{{ service.name }}" data-action="disable">Disable Auto-start</button>
                     {% else %}
-                    <a href="/services/control/{{ service.name }}/enable" class="btn btn-sm btn-outline-info btn-actions">Enable Auto-start</a>
+                    <button type="button" class="btn btn-sm btn-outline-info btn-actions" data-service="{{ service.name }}" data-action="enable">Enable Auto-start</button>
                     {% endif %}
 
                     <a href="/logs/{{ service.name }}" class="btn btn-sm btn-secondary btn-actions">Logs</a>
                     <a href="/services/edit/{{ service.name }}" class="btn btn-sm btn-info btn-actions">Edit</a>
-                    <a href="/services/delete/{{ service.name }}" class="btn btn-sm btn-danger btn-actions" onclick="return confirm('Are you sure you want to delete this service?')">Delete</a>
+                    <button type="button" class="btn btn-sm btn-danger btn-actions" data-service="{{ service.name }}" data-action="delete">Delete</button>
                 </div>
+                <div class="action-error text-danger small mt-2 d-none"></div>
             </div>
         </div>
     </div>
@@ -109,6 +135,7 @@
     No services registered yet. <a href="/services/add" class="alert-link">Add a service</a> to get started.
 </div>
 {% endif %}
+</div>
 
 <div class="mt-5">
     <h3>Port Ranges</h3>
@@ -135,80 +162,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle command toggle functionality
-    document.querySelectorAll('.command-toggle').forEach(function(toggle) {
-        toggle.addEventListener('click', function(e) {
-            e.preventDefault();
-
-            // Navigate to the command display within the same paragraph
-            const paragraph = this.closest('p');
-            const commandDisplay = paragraph.querySelector('.command-display');
-            const shortSpan = commandDisplay.querySelector('.command-short');
-            const fullSpan = commandDisplay.querySelector('.command-full');
-
-            if (shortSpan.classList.contains('d-none')) {
-                // Currently showing full, switch to short
-                shortSpan.classList.remove('d-none');
-                fullSpan.classList.add('d-none');
-                this.textContent = '▶';
-                this.title = 'Expand command';
-            } else {
-                // Currently showing short, switch to full
-                shortSpan.classList.add('d-none');
-                fullSpan.classList.remove('d-none');
-                this.textContent = '▼';
-                this.title = 'Collapse command';
-            }
-        });
-    });
-
-    // Handle port toggle functionality
-    document.querySelectorAll('.port-toggle').forEach(function(toggle) {
-        toggle.addEventListener('click', function(e) {
-            e.preventDefault();
-
-            // Find the port details section
-            const card = this.closest('.card-body');
-            const portDetails = card.querySelector('.port-details');
-            const portContent = portDetails.querySelector('.port-detail-content');
-            const serviceName = portContent.getAttribute('data-service');
-
-            if (portDetails.classList.contains('d-none')) {
-                // Show port details
-                this.textContent = '▼';
-                this.title = 'Hide port details';
-                portDetails.classList.remove('d-none');
-
-                // Load port details if not already loaded
-                if (portContent.innerHTML.includes('Loading port details...')) {
-                    loadPortDetails(serviceName, portContent);
-                }
-            } else {
-                // Hide port details
-                this.textContent = '▶';
-                this.title = 'Show port details';
-                portDetails.classList.add('d-none');
-            }
-        });
-    });
-});
-
-function loadPortDetails(serviceName, contentElement) {
-    fetch(`/api/services/${serviceName}/port-details`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                contentElement.innerHTML = data.html;
-            } else {
-                contentElement.innerHTML = '<span class="text-muted">No detailed port information available</span>';
-            }
-        })
-        .catch(error => {
-            console.error('Error loading port details:', error);
-            contentElement.innerHTML = '<span class="text-danger">Error loading port details</span>';
-        });
-}
-</script>
+<script src="/static/js/gpu.js"></script>
 {% endblock %}

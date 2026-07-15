@@ -7,6 +7,7 @@
       "build": "test -d .venv || python3 -m venv .venv; ./.venv/bin/python -m pip --version >/dev/null 2>&1 || ./.venv/bin/python -m ensurepip --upgrade; ./.venv/bin/python -m pip install -r requirements.txt",
       "start": "./.venv/bin/python -m web.app --host 127.0.0.1 --port $PORT --no-browser",
       "port_env": "PORT",
+      "port": 9000,
       "health": "/api/metrics",
       "expose": true,
       "env": {

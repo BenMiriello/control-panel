@@ -9,6 +9,8 @@ unmanaged) is exactly what we surface, since an unmanaged process holding the
 card is the classic cause of a broker headroom stall / OOM.
 """
 
+import json
+import os
 import subprocess
 
 try:
@@ -16,13 +18,27 @@ try:
 except ImportError:
     psutil = None
 
-# Substrings that identify a process as a known broker-managed GPU consumer.
-# Everything else holding VRAM is reported as unmanaged.
-_MANAGED_MARKERS = {
-    "ollama": "ollama",
-    "comfyui": "comfyui",
-    "main.py": "comfyui",
-}
+
+def _load_managed_markers():
+    """Substrings that identify a process as a known broker-managed GPU
+    consumer, keyed by lowercase command-line substring -> consumer name.
+    Everything else holding VRAM is reported as unmanaged.
+
+    Configured per-machine via CONTROL_PANEL_GPU_MARKERS (a JSON object),
+    since which apps are broker-managed consumers is deployment-specific,
+    not something this tool should assume.
+    """
+    raw = os.environ.get("CONTROL_PANEL_GPU_MARKERS")
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return {str(k).lower(): str(v) for k, v in data.items()}
+    except (TypeError, ValueError):
+        return {}
+
+
+_MANAGED_MARKERS = _load_managed_markers()
 
 
 def is_available():

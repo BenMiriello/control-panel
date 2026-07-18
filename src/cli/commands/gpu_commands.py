@@ -170,7 +170,7 @@ def gpu_clear(yes):
 @click.command("gpu-disable")
 @click.argument("consumer")
 def gpu_disable(consumer):
-    """Block an app from acquiring the GPU (e.g. ollama, comfyui, forge)
+    """Block an app from acquiring the GPU, by its broker consumer name
 
     The block is enforced by the shared broker, so it applies to every app on
     the machine, not just Control Panel.

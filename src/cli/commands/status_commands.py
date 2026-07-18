@@ -330,7 +330,6 @@ def _is_web_port(port):
         (3000, 3010),  # Development servers
         (5000, 5010),  # Flask, etc.
         (8000, 8090),  # Django, web servers
-        (11430, 11440),  # Ollama range
     ]
 
     return any(start <= port <= end for start, end in web_ranges)

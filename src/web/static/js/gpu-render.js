@@ -192,7 +192,9 @@ function leaseBlock(broker) {
 
 function accessSection(procs, broker) {
     if (!broker.reachable) return '';
-    const known = new Set(['ollama', 'comfyui', 'forge']);
+    // Consumers are whatever the broker/probe have actually observed, not a
+    // fixed app list: which apps talk to the broker is deployment-specific.
+    const known = new Set();
     procs.forEach((p) => { if (p.managed_by) known.add(p.managed_by); });
     (broker.disabled || []).forEach((d) => known.add(d));
     if (!known.size) return '';

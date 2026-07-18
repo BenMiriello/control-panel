@@ -691,7 +691,6 @@ def apply_web_port_heuristics(ports):
         (3000, 3010),  # Development servers (React, Express, etc.)
         (5000, 5010),  # Flask, etc.
         (8000, 8090),  # Django, web servers, etc.
-        (11430, 11440),  # Ollama range
     ]
 
     web_ports = []
